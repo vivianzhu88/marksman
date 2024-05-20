@@ -1,3 +1,4 @@
+use std::io;
 use clap::{Command, Arg};
 use std::io::{Read, Write};
 use dirs;
@@ -9,11 +10,11 @@ mod config;
 
 fn main() -> Result<()> {
     let config_path = config::get_config_path().context("Failed to get config path")?;
-    let mut config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
+    let mut auth_config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
         api_key: String::new(),
         auth_token: String::new(),
     });
-    let mut client = ResyClient::new();
+    let mut client = ResyClient::new_from_config(auth_config.api_key, auth_config.auth_token);
 
 
     let cli = Command::new("marksman")
@@ -38,6 +39,10 @@ fn main() -> Result<()> {
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
                         .required(true)
                 ),
+        )
+        .subcommand(
+            Command::new("load")
+                .about("Load auth credentials for Resy API")
         );
 
     // parse cli
@@ -55,6 +60,21 @@ fn main() -> Result<()> {
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one::<String>("url").expect("URL is required");
             client.get_venue_id(url);
+        }
+        Some(("load", _)) => {
+            let mut input_string = String::new();
+            println!("Enter API Key:");
+            io::stdin().read_line(&mut input_string).expect("Failed to read line");
+            let api_key = input_string.trim().to_string();
+
+            input_string.clear();
+            println!("Enter Auth Token:");
+            io::stdin().read_line(&mut input_string).expect("Failed to read line");
+            let auth_token = input_string.trim().to_string();
+
+            auth_config.api_key = api_key;
+            auth_config.auth_token = auth_token;
+            config::write_config(&auth_config, &config_path).context("Failed to write config")?;
         }
         _ => {} // handle new commands
     }
