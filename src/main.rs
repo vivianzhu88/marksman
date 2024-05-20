@@ -1,7 +1,10 @@
 use clap::{Command, Arg};
+use resy_client::ResyClient;
+
+mod resy_client;
+
 
 fn main() {
-
     let cli = Command::new("marksman")
         .version("0.1")
         .author("Anish Agrawal")
