@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
                     Arg::new("url")
                         .help("url to Resy booking page")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
-                        .required(true)
+                        .required(false)
                 ),
         )
         .subcommand(
@@ -64,15 +64,8 @@ async fn main() -> Result<()> {
             }
         }
         Some(("venue", sub_matches)) => {
-            let url = sub_matches.get_one::<String>("url").expect("URL is required");
-            client.load_venue_slug(url);
-            match client.load_venue_id().await {
-                Ok(venue_id) => {
-                    marks_config.venue_id = venue_id.clone();
-                    config::write_config(&marks_config, None).context("Failed to write config")?;
-                },
-                Err(e) => {}
-            }
+            let url = sub_matches.get_one::<String>("url").map(String::as_str);
+            client.get_venue_info(url).await;
         }
         Some(("load", _)) => {
             let mut input_string = String::new();
