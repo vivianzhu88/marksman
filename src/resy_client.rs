@@ -9,7 +9,7 @@ pub(crate) struct ResyClient {
 }
 
 impl ResyClient {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ResyClient {
             venue_id: String::new(),
             user_auth: UserAuth {
@@ -20,23 +20,22 @@ impl ResyClient {
     }
 
     // extract venue_id from restaurant page
-    fn get_venue_id(&mut self, url: &str) {
+    pub(crate) fn get_venue_id(&mut self, url: &str) {
         let venue_slug = extract_venue_slug(url);
-        self.venue_id = "Extracted ID based on URL".to_string();  // Placeholder
-        println!("Venue ID set to: {}", self.venue_id);
+        println!("Venue found: {}", venue_slug);
     }
 
-    // Simulates checking reservations
-    fn check_reservations(&self) {
-        println!("Checking reservations for Venue ID: {}", self.venue_id);
-        // Implementation to check reservations
-    }
-
-    // Simulates getting available slots
-    fn get_slots(&self) {
-        println!("Getting slots for Venue ID: {}", self.venue_id);
-        // Implementation to get available slots
-    }
+    // // Simulates checking reservations
+    // fn check_reservations(&self) {
+    //     println!("Checking reservations for Venue ID: {}", self.venue_id);
+    //     // Implementation to check reservations
+    // }
+    //
+    // // Simulates getting available slots
+    // fn get_slots(&self) {
+    //     println!("Getting slots for Venue ID: {}", self.venue_id);
+    //     // Implementation to get available slots
+    // }
 }
 
 

@@ -2,7 +2,7 @@ use clap::{Command, Arg};
 use std::io::{Read, Write};
 use dirs;
 use anyhow::{Context, Result};
-// use resy_client::ResyClient;
+use resy_client::ResyClient;
 
 mod resy_client;
 mod config;
@@ -13,6 +13,7 @@ fn main() -> Result<()> {
         api_key: String::new(),
         auth_token: String::new(),
     });
+    let mut client = ResyClient::new();
 
 
     let cli = Command::new("marksman")
@@ -50,6 +51,10 @@ fn main() -> Result<()> {
             } else {
                 println!("Hello, world!");
             }
+        }
+        Some(("venue", sub_matches)) => {
+            let url = sub_matches.get_one::<String>("url").expect("URL is required");
+            client.get_venue_id(url);
         }
         _ => {} // handle new commands
     }
