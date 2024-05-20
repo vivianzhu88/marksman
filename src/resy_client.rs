@@ -52,7 +52,7 @@ impl ResyClient {
 
         let day = "2024-05-21";
         match find_reservations(&self.user_auth.api_key, &self.venue_id, &self.user_auth.auth_token, &day, 6).await {
-            Ok(reservations) => println!("Reservations: {}", reservations),
+            Ok(slots) => {},
             Err(e) => eprintln!("Error: {}", e),
         }
     }
