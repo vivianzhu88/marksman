@@ -1,10 +1,20 @@
 use clap::{Command, Arg};
-use resy_client::ResyClient;
+use std::io::{Read, Write};
+use dirs;
+use anyhow::{Context, Result};
+// use resy_client::ResyClient;
 
 mod resy_client;
+mod config;
+
+fn main() -> Result<()> {
+    let config_path = config::get_config_path().context("Failed to get config path")?;
+    let mut config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
+        api_key: String::new(),
+        auth_token: String::new(),
+    });
 
 
-fn main() {
     let cli = Command::new("marksman")
         .version("0.1")
         .author("Anish Agrawal")
@@ -15,7 +25,17 @@ fn main() {
                 .arg(
                     Arg::new("name")
                         .help("The name to greet")
-                        .value_parser(clap::builder::NonEmptyStringValueParser::new()),
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                ),
+        )
+        .subcommand(
+            Command::new("venue")
+                .about("Details about venue")
+                .arg(
+                    Arg::new("url")
+                        .help("url to Resy booking page")
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                        .required(true)
                 ),
         );
 
@@ -33,4 +53,6 @@ fn main() {
         }
         _ => {} // handle new commands
     }
+
+    Ok(())
 }
