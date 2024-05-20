@@ -63,18 +63,21 @@ fn main() -> Result<()> {
         }
         Some(("load", _)) => {
             let mut input_string = String::new();
-            println!("Enter API Key:");
+            println!(">> Enter API Key: ");
+            io::stdout().flush().expect("Failed to flush stdout");
             io::stdin().read_line(&mut input_string).expect("Failed to read line");
             let api_key = input_string.trim().to_string();
 
             input_string.clear();
-            println!("Enter Auth Token:");
+            println!(">> Enter Auth Token: ");
+            io::stdout().flush().expect("Failed to flush stdout");
             io::stdin().read_line(&mut input_string).expect("Failed to read line");
             let auth_token = input_string.trim().to_string();
 
             auth_config.api_key = api_key;
             auth_config.auth_token = auth_token;
             config::write_config(&auth_config, &config_path).context("Failed to write config")?;
+            println!("Successfully loaded .marksman.config!");
         }
         _ => {} // handle new commands
     }

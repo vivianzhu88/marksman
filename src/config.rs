@@ -12,7 +12,7 @@ pub struct Config {
 
 pub fn get_config_path() -> anyhow::Result<PathBuf> {
     let path = dirs::home_dir()
-        .map(|path| path.join(".marksman_config.yml"))
+        .map(|path| path.join(".marksman.config"))
         .context("Could not find home directory")?;
 
     // check if the file exists and create it if it doesn't
