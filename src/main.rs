@@ -8,13 +8,19 @@ use resy_client::ResyClient;
 mod resy_client;
 mod config;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let config_path = config::get_config_path().context("Failed to get config path")?;
-    let mut auth_config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
+    let mut marks_config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
         api_key: String::new(),
         auth_token: String::new(),
+        venue_id: String::new(),
     });
-    let mut client = ResyClient::new_from_config(auth_config.api_key, auth_config.auth_token);
+    let mut client = ResyClient::from_config(
+        marks_config.venue_id.clone(),
+        marks_config.api_key.clone(),
+        marks_config.auth_token.clone(),
+    );
 
 
     let cli = Command::new("marksman")
@@ -59,7 +65,14 @@ fn main() -> Result<()> {
         }
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one::<String>("url").expect("URL is required");
-            client.get_venue_id(url);
+            client.load_venue_slug(url);
+            match client.load_venue_id().await {
+                Ok(venue_id) => {
+                    marks_config.venue_id = venue_id.clone();
+                    config::write_config(&marks_config, None).context("Failed to write config")?;
+                },
+                Err(e) => {}
+            }
         }
         Some(("load", _)) => {
             let mut input_string = String::new();
@@ -74,9 +87,11 @@ fn main() -> Result<()> {
             io::stdin().read_line(&mut input_string).expect("Failed to read line");
             let auth_token = input_string.trim().to_string();
 
-            auth_config.api_key = api_key;
-            auth_config.auth_token = auth_token;
-            config::write_config(&auth_config, &config_path).context("Failed to write config")?;
+            marks_config.api_key = api_key;
+            marks_config.auth_token = auth_token;
+
+            config::write_config(&marks_config, Some(&config_path)).context("Failed to write config")?;
+            client.load_config(marks_config);
             println!("Successfully loaded .marksman.config!");
         }
         _ => {} // handle new commands
