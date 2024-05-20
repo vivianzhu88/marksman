@@ -1,7 +1,6 @@
 use std::io;
 use clap::{Command, Arg};
-use std::io::{Read, Write};
-use dirs;
+use std::io::Write;
 use anyhow::{Context, Result};
 use resy_client::ResyClient;
 
