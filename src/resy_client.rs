@@ -51,7 +51,7 @@ impl ResyClient {
         }
 
         let day = "2024-05-21";
-        match find_reservations(&self.user_auth.api_key, &self.venue_id, &self.user_auth.auth_token, &day, 6).await {
+        match find_reservation_slots(&self.user_auth.api_key, &self.venue_id, &self.user_auth.auth_token, &day, 6).await {
             Ok(slots) => {},
             Err(e) => eprintln!("Error: {}", e),
         }
@@ -94,10 +94,8 @@ pub async fn fetch_venue_id(venue_slug: &str, api_key: &str, auth_token: &str) -
     let url = format!("https://api.resy.com/3/venue?url_slug={}&location=new-york-ny", venue_slug);
 
     let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
     headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", api_key)).unwrap());
     headers.insert("x-resy-auth-token", HeaderValue::from_str(auth_token).unwrap());
-    headers.insert("x-resy-universal-auth", HeaderValue::from_str(auth_token).unwrap());
 
     let res = client.get(url)
         .headers(headers)
@@ -120,7 +118,7 @@ pub async fn fetch_venue_id(venue_slug: &str, api_key: &str, auth_token: &str) -
     Ok(String::new())
 }
 
-pub async fn find_reservations(api_key: &str, venue_id: &str, auth_token: &str, day: &str, party_size: u8) -> Result<Vec<Value>, Box<dyn Error>> {
+pub async fn find_reservation_slots(api_key: &str, venue_id: &str, auth_token: &str, day: &str, party_size: u8) -> Result<Vec<Value>, Box<dyn Error>> {
     let client = reqwest::Client::new();
     let url = format!("https://api.resy.com/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", day, party_size, venue_id);
 
@@ -167,6 +165,42 @@ pub async fn find_reservations(api_key: &str, venue_id: &str, auth_token: &str, 
     } else {
         println!("Failed to fetch reservations: {}", res.status());
         Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to fetch reservations")))
+    }
+}
+
+pub async fn get_reservation_details(
+    auth_token: &str,
+    api_key: &str,
+    commit: u8, // 0 for dry run, 1 for token gen
+    config_id: &str,
+    party_size: u8,
+    day: &str,
+) -> Result<String, Box<dyn Error>> {
+    let client = reqwest::Client::new();
+    let url = "https://api.resy.com/3/details";
+
+    let mut headers = HeaderMap::new();
+    headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", api_key))?);
+    headers.insert("x-resy-auth-token", HeaderValue::from_str(auth_token)?);
+
+    let data = json!({
+        "commit": commit,
+        "config_id": config_id,
+        "day": day,
+        "party_size": party_size
+    });
+
+    let res = client.post(url)
+        .headers(headers)
+        .json(&data)
+        .send()
+        .await?;
+
+    if res.status().is_success() {
+        let body = res.text().await?;
+        Ok(body)
+    } else {
+        Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to fetch reservation details: {}", res.status()))))
     }
 }
 

@@ -6,6 +6,7 @@ use resy_client::ResyClient;
 
 mod resy_client;
 mod config;
+mod resy_api_gateway;
 
 #[tokio::main]
 async fn main() -> Result<()> {
