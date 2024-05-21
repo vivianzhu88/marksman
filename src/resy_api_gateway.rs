@@ -6,6 +6,32 @@ use reqwest::Client;
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
+const RESY_API_BASE_URL: &str = "https://api.resy.com";
+
+
+// Define Resy API Error
+#[derive(Debug)]
+pub struct ResyAPIError {
+    pub message: String,
+}
+
+impl std::fmt::Display for ResyAPIError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for ResyAPIError {}
+
+impl From<std::io::Error> for ResyAPIError {
+    fn from(error: std::io::Error) -> Self {
+        ResyAPIError {
+            message: error.to_string(),
+        }
+    }
+}
+
+// Resy API Gateway
 pub struct ResyAPIGateway {
     client: Client,
     api_key: String,
@@ -21,85 +47,71 @@ impl ResyAPIGateway {
         }
     }
 
-    pub async fn fetch_venue_id(&self, venue_slug: &str) -> Result<String, Box<dyn Error>> {
-        let client = reqwest::Client::new();
-        let url = format!("https://api.resy.com/3/venue?url_slug={}&location=new-york-ny", venue_slug);
+    pub async fn get_user(&self) -> Result<Value, Box<dyn Error>> {
+        let url = format!("{}/2/user", RESY_API_BASE_URL);
 
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key)).unwrap());
         headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token).unwrap());
 
-        let res = client.get(url)
+        let res = self.client.get(url)
             .headers(headers)
             .send()
             .await?;
 
         if res.status().is_success() {
-            let body = res.text().await?;
-            let json: Value = serde_json::from_str(&body)?;
-            if let Some(venue_id) = json["id"]["resy"].as_u64() {
-                let venue_id_str = venue_id.to_string();
-                return Ok(venue_id_str);
-            } else {
-                println!("venue_id not found");
-            }
+            let response = res.json().await?;
+            Ok(response)
         } else {
-            println!("failed to fetch venue_id: {}", res.status());
+            Err(Box::new(ResyAPIError {
+                message: format!("Failed to fetch user: {}", res.status())
+            }))
         }
-
-        Ok(String::new())
     }
 
-    pub async fn find_reservation_slots(&self, venue_id: &str, day: &str, party_size: u8) -> Result<Vec<Value>, Box<dyn Error>> {
-        let client = reqwest::Client::new();
-        let url = format!("https://api.resy.com/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", day, party_size, venue_id);
+    pub async fn get_venue(&self, venue_slug: &str) -> Result<Value, Box<dyn Error>> {
+        let url = format!("{}/3/venue?url_slug={}&location=new-york-ny", RESY_API_BASE_URL, venue_slug);
+
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key)).unwrap());
+        headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token).unwrap());
+
+        let res = self.client.get(url)
+            .headers(headers)
+            .send()
+            .await?;
+
+        if res.status().is_success() {
+            let response = res.json().await?;
+            Ok(response)
+        } else {
+            Err(Box::new(ResyAPIError {
+                message: format!("Failed to fetch venue: {}", res.status())
+            }))
+        }
+    }
+
+    pub async fn find_reservation(&self, venue_id: &str, day: &str, party_size: u8) -> Result<Value, Box<dyn Error>> {
+        let url = format!("{}/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", RESY_API_BASE_URL, day, party_size, venue_id);
 
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key))?);
         headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token)?);
 
-        let res = client.get(url)
+        let res = self.client.get(url)
             .headers(headers)
             .send()
             .await?;
 
         if res.status().is_success() {
-            let body = res.text().await?;
-            let json: Value = serde_json::from_str(&body)?;
-            if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
-                let mut summarized = Vec::new();
-
-                for slot in slot_info {
-                    if let (Some(config), Some(date)) = (slot["config"].as_object(), slot["date"].as_object()) {
-                        if let (Some(id), Some(token), Some(slot_type), Some(start), Some(end)) = (
-                            config.get("id"),
-                            config.get("token"),
-                            config.get("type"),
-                            date.get("start"),
-                            date.get("end")
-                        ) {
-                            summarized.push(json!({
-                    "id": id,
-                    "token": token,
-                    "type": slot_type,
-                    "start": start,
-                    "end": end
-                }));
-                        }
-                    }
-                }
-
-                print_slots_table(&summarized);
-                return Ok(summarized);
-            } else {
-                return Ok(Vec::new());
-            }
+            let response = res.json().await?;
+            Ok(response)
         } else {
-            println!("Failed to fetch reservations: {}", res.status());
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to fetch reservations")))
+            Err(Box::new(ResyAPIError {
+                message: format!("Failed to find reservation slots: {}", res.status())
+            }))
         }
     }
-
 
     pub async fn get_reservation_details(
         &self,
@@ -108,64 +120,32 @@ impl ResyAPIGateway {
         party_size: u8,
         day: &str,
     ) -> Result<String, Box<dyn Error>> {
-        let client = reqwest::Client::new();
-        let url = "https://api.resy.com/3/details";
+        let url = format!("{}/3/details", RESY_API_BASE_URL);
 
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key))?);
         headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token)?);
 
         let data = json!({
-        "commit": commit,
-        "config_id": config_id,
-        "day": day,
-        "party_size": party_size
-    });
+            "commit": commit,
+            "config_id": config_id,
+            "day": day,
+            "party_size": party_size
+        });
 
-        let res = client.post(url)
+        let res = self.client.post(url)
             .headers(headers)
             .json(&data)
             .send()
             .await?;
 
         if res.status().is_success() {
-            let body = res.text().await?;
-            Ok(body)
+            let response = res.json().await?;
+            Ok(response)
         } else {
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to fetch reservation details: {}", res.status()))))
+            Err(Box::new(ResyAPIError {
+                message: format!("Failed to find reservation details: {}", res.status())
+            }))
         }
     }
-}
-
-
-fn print_slots_table(slots: &[Value]) {
-    let mut table = Table::new();
-
-    table.add_row(row!["Type", "Start", "End", "ID", "Token"]);
-
-    for slot in slots {
-        if let (Some(slot_type), Some(start), Some(end), Some(id), Some(token)) = (
-            slot.get("type"),
-            slot.get("start"),
-            slot.get("end"),
-            slot.get("id"),
-            slot.get("token"),
-        ) {
-            let id_str = if id.is_number() {
-                id.to_string()
-            } else {
-                id.as_str().unwrap_or("").to_string()
-            };
-
-            table.add_row(Row::new(vec![
-                Cell::new(slot_type.as_str().unwrap_or("")),
-                Cell::new(start.as_str().unwrap_or("")),
-                Cell::new(end.as_str().unwrap_or("")),
-                Cell::new(&id_str),
-                Cell::new(token.as_str().unwrap_or("")),
-            ]));
-        }
-    }
-
-    table.printstd();
 }
