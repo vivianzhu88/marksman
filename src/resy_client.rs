@@ -61,15 +61,42 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
-    pub(crate) async fn get_venue_info(&mut self, url: Option<&str>) {
-        if let Some(url) = url {
-            self.load_venue_id_from_url(url).await.expect("TODO: panic message");
-        }
-
-        let day = "2024-06-04";
-        match find_reservation_slots(&self.user_auth.api_key, &self.venue_id, &self.user_auth.auth_token, &day, 6).await {
-            Ok(slots) => {},
-            Err(e) => eprintln!("Error: {}", e),
+    async fn find_reservation_slots(&mut self) -> ResyResult<Vec<Value>> {
+        match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size).await {
+            Ok(json) => {
+                if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
+                    let mut summarized = Vec::new();
+                    for slot in slot_info {
+                        if let (Some(config), Some(date), Some(size)) = (slot["config"].as_object(), slot["date"].as_object(), slot["size"].as_object()) {
+                            if let (Some(id), Some(token), Some(slot_type), Some(start), Some(end), Some(min_size), Some(max_size)) = (
+                                config.get("id"),
+                                config.get("token"),
+                                config.get("type"),
+                                date.get("start"), // format: "2024-05-28 13:00:00"
+                                date.get("end"),
+                                size.get("min"),
+                                size.get("max")
+                            ) {
+                                summarized.push(json!({
+                                    "id": id,
+                                    "token": token,
+                                    "type": slot_type,
+                                    "start": start,
+                                    "end": end,
+                                    "min_size": min_size,
+                                    "max_size": max_size,
+                                }));
+                            }
+                        }
+                    }
+                    Ok(summarized)
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            Err(e) => {
+                Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
+            }
         }
     }
 
@@ -101,58 +128,6 @@ fn extract_venue_slug(url: &str) -> String {
         return url[start..start + end].to_string();
     }
     String::new()
-}
-
-// API CALLS
-
-pub async fn find_reservation_slots(api_key: &str, venue_id: &str, auth_token: &str, day: &str, party_size: u8) -> Result<Vec<Value>, Box<dyn Error>> {
-    let client = reqwest::Client::new();
-    let url = format!("https://api.resy.com/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", day, party_size, venue_id);
-
-    let mut headers = HeaderMap::new();
-    headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", api_key))?);
-    headers.insert("x-resy-auth-token", HeaderValue::from_str(auth_token)?);
-
-    let res = client.get(url)
-        .headers(headers)
-        .send()
-        .await?;
-
-    if res.status().is_success() {
-        let body = res.text().await?;
-        let json: Value = serde_json::from_str(&body)?;
-        if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
-            let mut summarized = Vec::new();
-
-            for slot in slot_info {
-                if let (Some(config), Some(date)) = (slot["config"].as_object(), slot["date"].as_object()) {
-                    if let (Some(id), Some(token), Some(slot_type), Some(start), Some(end)) = (
-                        config.get("id"),
-                        config.get("token"),
-                        config.get("type"),
-                        date.get("start"),
-                        date.get("end")
-                    ) {
-                        summarized.push(json!({
-                    "id": id,
-                    "token": token,
-                    "type": slot_type,
-                    "start": start,
-                    "end": end
-                }));
-                    }
-                }
-            }
-
-            print_table(&summarized);
-            return Ok(summarized);
-        } else {
-            return Ok(Vec::new());
-        }
-    } else {
-        println!("Failed to fetch reservations: {}", res.status());
-        Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to fetch reservations")))
-    }
 }
 
 fn print_table(slots: &[Value]) {
