@@ -16,12 +16,8 @@ async fn main() -> Result<()> {
         auth_token: String::new(),
         venue_id: String::new(),
     });
-    let mut client = ResyClient::from_config(
-        marks_config.venue_id.clone(),
-        marks_config.api_key.clone(),
-        marks_config.auth_token.clone(),
-    );
 
+    let mut resy_client = ResyClient::from_config(marks_config);
 
     let cli = Command::new("marksman")
         .version("0.1")
@@ -65,7 +61,7 @@ async fn main() -> Result<()> {
         }
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one::<String>("url").map(String::as_str);
-            client.get_venue_info(url).await;
+            resy_client.get_venue_info(url).await;
         }
         Some(("load", _)) => {
             let mut input_string = String::new();
@@ -84,7 +80,7 @@ async fn main() -> Result<()> {
             marks_config.auth_token = auth_token;
 
             config::write_config(&marks_config, Some(&config_path)).context("Failed to write config")?;
-            client.load_config(marks_config);
+            resy_client.load_config(marks_config);
             println!("Successfully loaded .marksman.config!");
         }
         _ => {} // handle new commands
