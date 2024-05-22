@@ -30,7 +30,7 @@ type ResyResult<T> = Result<T, ResyClientError>;
 #[derive(Debug)]
 pub struct ResyClient {
     config: Config,
-    api_gateway: ResyAPIGateway
+    api_gateway: ResyAPIGateway,
 }
 
 impl ResyClient {
@@ -47,7 +47,7 @@ impl ResyClient {
 
         ResyClient {
             config,
-            api_gateway: ResyAPIGateway::from_auth(api_key, auth_token)
+            api_gateway: ResyAPIGateway::from_auth(api_key, auth_token),
         }
     }
 
@@ -67,8 +67,23 @@ impl ResyClient {
                 if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
                     let mut summarized = Vec::new();
                     for slot in slot_info {
-                        if let (Some(config), Some(date), Some(size)) = (slot["config"].as_object(), slot["date"].as_object(), slot["size"].as_object()) {
-                            if let (Some(id), Some(token), Some(slot_type), Some(start), Some(end), Some(min_size), Some(max_size)) = (
+                        if let (
+                            Some(config),
+                            Some(date),
+                            Some(size)
+                        ) = (
+                            slot["config"].as_object(),
+                            slot["date"].as_object(),
+                            slot["size"].as_object()
+                        ) {
+                            if let (
+                                Some(id),
+                                Some(token),
+                                Some(slot_type),
+                                Some(start), Some(end),
+                                Some(min_size),
+                                Some(max_size)
+                            ) = (
                                 config.get("id"),
                                 config.get("token"),
                                 config.get("type"),
@@ -100,7 +115,7 @@ impl ResyClient {
         }
     }
 
-    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<str>{
+    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<str> {
         let venue_slug = extract_venue_slug(url);
 
         match self.api_gateway.get_venue(venue_slug.as_str()).await {
@@ -112,7 +127,7 @@ impl ResyClient {
                 } else {
                     Err(ResyClientError::NotFound("Venue ID not found".to_string()))
                 }
-            },
+            }
             Err(e) => {
                 Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
             }
