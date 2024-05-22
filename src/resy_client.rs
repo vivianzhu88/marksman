@@ -1,46 +1,46 @@
 use std::error::Error;
+use chrono::{Duration, Utc};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, AUTHORIZATION};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
 use prettytable::row::Row;
 use prettytable::cell::Cell;
 use crate::config::Config;
+use crate::resy_api_gateway::ResyAPIGateway;
 
 
-struct UserAuth {
-    api_key: String,
-    auth_token: String,
-}
-
-pub(crate) struct ResyClient {
-    venue_id: String,
-    user_auth: UserAuth,
+#[derive(Debug)]
+pub struct ResyClient {
+    config: Config,
+    api_gateway: ResyAPIGateway
 }
 
 impl ResyClient {
     pub(crate) fn new() -> Self {
         ResyClient {
-            venue_id: String::new(),
-            user_auth: UserAuth {
-                api_key: String::new(),
-                auth_token: String::new(),
-            },
+            config: Config::default(),
+            api_gateway: ResyAPIGateway::new(),
         }
     }
 
-    pub(crate) fn from_config(venue_id: String, api_key: String, auth_token: String) -> Self {
+    pub(crate) fn from_config(config: Config) -> Self {
+        let api_key = config.api_key.clone();
+        let auth_token = config.auth_token.clone();
+
         ResyClient {
-            venue_id,
-            user_auth: UserAuth {
-                api_key,
-                auth_token,
-            },
+            config,
+            api_gateway: ResyAPIGateway::from_auth(api_key, auth_token)
         }
     }
 
-    pub(crate) fn load_config(&mut self, config: Config) {
-        self.user_auth.auth_token = config.auth_token;
-        self.user_auth.api_key = config.api_key;
+    pub(crate) fn update_auth(&mut self, api_key: String, auth_token: String) {
+        let api_key_clone = api_key.clone();
+        let auth_token_clone = auth_token.clone();
+
+        self.config.api_key = api_key;
+        self.config.auth_token = auth_token;
+
+        self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
     pub(crate) async fn get_venue_info(&mut self, url: Option<&str>) {
@@ -50,7 +50,7 @@ impl ResyClient {
             println!("fetching....(venue_id: {})", self.venue_id);
         }
 
-        let day = "2024-05-21";
+        let day = "2024-06-04";
         match find_reservation_slots(&self.user_auth.api_key, &self.venue_id, &self.user_auth.auth_token, &day, 6).await {
             Ok(slots) => {},
             Err(e) => eprintln!("Error: {}", e),

@@ -21,7 +21,7 @@ impl std::fmt::Display for ResyAPIError {
     }
 }
 
-impl std::error::Error for ResyAPIError {}
+impl Error for ResyAPIError {}
 
 impl From<std::io::Error> for ResyAPIError {
     fn from(error: std::io::Error) -> Self {
@@ -32,6 +32,7 @@ impl From<std::io::Error> for ResyAPIError {
 }
 
 // Resy API Gateway
+#[derive(Debug)]
 pub struct ResyAPIGateway {
     client: Client,
     api_key: String,
@@ -39,7 +40,15 @@ pub struct ResyAPIGateway {
 }
 
 impl ResyAPIGateway {
-    pub fn new(api_key: String, auth_token: String) -> Self {
+    pub fn new() -> Self {
+        ResyAPIGateway {
+            client: Client::new(),
+            api_key: String::new(),
+            auth_token: String::new(),
+        }
+    }
+
+    pub fn from_auth(api_key: String, auth_token: String) -> Self {
         ResyAPIGateway {
             client: Client::new(),
             api_key,
