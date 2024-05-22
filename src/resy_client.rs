@@ -70,17 +70,22 @@ impl ResyClient {
                         if let (
                             Some(config),
                             Some(date),
-                            Some(size)
+                            Some(size),
+                            Some(quantity),
+                            // Some(payment)
                         ) = (
                             slot["config"].as_object(),
                             slot["date"].as_object(),
-                            slot["size"].as_object()
+                            slot["size"].as_object(),
+                            slot["quantity"].as_u64(),
+                            // slot["payment"].as_object()
                         ) {
                             if let (
                                 Some(id),
                                 Some(token),
                                 Some(slot_type),
-                                Some(start), Some(end),
+                                Some(start),
+                                Some(end),
                                 Some(min_size),
                                 Some(max_size)
                             ) = (
@@ -100,6 +105,7 @@ impl ResyClient {
                                     "end": end,
                                     "min_size": min_size,
                                     "max_size": max_size,
+                                    "quantity": quantity,
                                 }));
                             }
                         }
