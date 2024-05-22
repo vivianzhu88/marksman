@@ -61,6 +61,25 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
+    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<str> {
+        let venue_slug = extract_venue_slug(url);
+
+        match self.api_gateway.get_venue(venue_slug.as_str()).await {
+            Ok(venue_info) => {
+                if let Some(venue_id) = venue_info["id"]["resy"].as_u8() {
+                    self.config.venue_id = venue_id.to_string();
+
+                    Ok(venue_id)
+                } else {
+                    Err(ResyClientError::NotFound("Venue ID not found".to_string()))
+                }
+            }
+            Err(e) => {
+                Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
+            }
+        }
+    }
+
     async fn find_reservation_slots(&mut self) -> ResyResult<Vec<Value>> {
         match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size).await {
             Ok(json) => {
@@ -113,25 +132,6 @@ impl ResyClient {
                     Ok(summarized)
                 } else {
                     Ok(Vec::new())
-                }
-            }
-            Err(e) => {
-                Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
-            }
-        }
-    }
-
-    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<str> {
-        let venue_slug = extract_venue_slug(url);
-
-        match self.api_gateway.get_venue(venue_slug.as_str()).await {
-            Ok(venue_info) => {
-                if let Some(venue_id) = venue_info["id"]["resy"].as_u8() {
-                    self.config.venue_id = venue_id.to_string();
-
-                    Ok(venue_id)
-                } else {
-                    Err(ResyClientError::NotFound("Venue ID not found".to_string()))
                 }
             }
             Err(e) => {
