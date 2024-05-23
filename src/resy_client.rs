@@ -1,5 +1,5 @@
 use std::error::Error;
-use chrono::{Duration, Utc};
+use chrono::{Duration, NaiveDate, Utc};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, AUTHORIZATION};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
@@ -15,6 +15,7 @@ pub enum ResyClientError {
     NetworkError(String),
     ApiError(String),
     InternalError(String),
+    InvalidInput(String),
 }
 
 impl std::fmt::Display for ResyClientError {
@@ -29,7 +30,7 @@ type ResyResult<T> = Result<T, ResyClientError>;
 
 #[derive(Debug)]
 pub struct ResyClient {
-    config: Config,
+    pub config: Config,
     api_gateway: ResyAPIGateway,
 }
 
@@ -51,6 +52,14 @@ impl ResyClient {
         }
     }
 
+    pub(crate) fn load_config(&mut self, config: Config) {
+        let api_key = config.api_key.clone();
+        let auth_token = config.auth_token.clone();
+
+        self.config = config;
+        self.api_gateway = ResyAPIGateway::from_auth(api_key, auth_token);
+    }
+
     pub(crate) fn update_auth(&mut self, api_key: String, auth_token: String) {
         let api_key_clone = api_key.clone();
         let auth_token_clone = auth_token.clone();
@@ -61,12 +70,34 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
-    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<str> {
-        let venue_slug = extract_venue_slug(url);
+    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
+        if let Some(url) = url {
+            let _ = self.load_venue_id_from_url(url).await?;
+        }
+
+        if let Some(date) = date {
+            let parsed_date = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                .map_err(|_| ResyClientError::InvalidInput("Invalid date format. Please use YYYY-MM-DD.".to_string()))?;
+            self.config.date = parsed_date.to_string();
+        }
+
+        let slots = self.find_reservation_slots().await?;
+
+        let venue_id = self.config.venue_id.clone();
+        Ok((venue_id, slots))
+    }
+
+    pub(crate) async fn run_snipe(&mut self) -> ResyResult<String> {
+
+        Ok("Placeholder fuck errors".to_string())
+    }
+
+    async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<u64> {
+        let venue_slug = extract_venue_slug(url)?;
 
         match self.api_gateway.get_venue(venue_slug.as_str()).await {
             Ok(venue_info) => {
-                if let Some(venue_id) = venue_info["id"]["resy"].as_u8() {
+                if let Some(venue_id) = venue_info["id"]["resy"].as_u64() {
                     self.config.venue_id = venue_id.to_string();
 
                     Ok(venue_id)
@@ -142,13 +173,13 @@ impl ResyClient {
 }
 
 
-fn extract_venue_slug(url: &str) -> String {
+fn extract_venue_slug(url: &str) -> ResyResult<String> {
     if let Some(start) = url.find("venues/") {
         let start = start + "venues/".len();
         let end = url[start..].find('?').unwrap_or_else(|| url[start..].len());
-        return url[start..start + end].to_string();
+        return Ok(url[start..start + end].to_string());
     }
-    String::new()
+    Err(ResyClientError::InvalidInput("invalid resy url".to_string()))
 }
 
 fn print_table(slots: &[Value]) {

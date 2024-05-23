@@ -7,7 +7,7 @@ use toml;
 use chrono::{Utc, Duration, Date};
 
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
     pub api_key: String,
     pub auth_token: String,
@@ -31,7 +31,7 @@ impl Default for Config {
 
 pub fn reset(path: &Path) -> Result<()> {
     if path.exists() {
-        std::fs::remove_file(path).context("Failed to delete config file")?;
+        fs::remove_file(path).context("Failed to delete config file")?;
     }
     init_config(path)
 }
@@ -66,9 +66,9 @@ pub fn read_config(path: &Path) -> Result<Config> {
 }
 
 pub fn write_config(config: &Config, path: Option<&Path>) -> Result<()> {
-    let config_path = path.cloned().unwrap_or_else(|| {
+    let config_path = path.map(|p| p.to_path_buf()).unwrap_or_else(|| {
         dirs::home_dir()
-            .map(|home| home.join(".marksman.config"))
+            .map(|home| home.join(".marksman/config")) // Corrected the path to use a subdirectory
             .expect("Unable to determine home directory")
     });
 

@@ -2,6 +2,7 @@ use std::io;
 use clap::{Command, Arg};
 use std::io::Write;
 use anyhow::{Context, Result};
+use regex::Regex;
 use resy_client::ResyClient;
 
 mod resy_client;
@@ -11,11 +12,8 @@ mod resy_api_gateway;
 #[tokio::main]
 async fn main() -> Result<()> {
     let config_path = config::get_config_path().context("Failed to get config path")?;
-    let mut marks_config = config::read_config(&config_path).unwrap_or_else(|_| config::Config {
-        api_key: String::new(),
-        auth_token: String::new(),
-        venue_id: String::new(),
-    });
+    let mut marks_config = config::read_config(&config_path)
+        .expect("Failed to load configuration");
 
     let mut resy_client = ResyClient::from_config(marks_config);
 
@@ -39,13 +37,29 @@ async fn main() -> Result<()> {
                     Arg::new("url")
                         .help("url to Resy booking page")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
-                        .required(false)
+                        .short('u')
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("date")
+                        .help("Target date for Resy booking")
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                        .short('d')
+                        .required(false),
                 ),
         )
         .subcommand(
             Command::new("load")
                 .about("Load auth credentials for Resy API")
-        );
+        )
+        .subcommand(
+            Command::new("state")
+                .about("current marksman configuration")
+        )
+        .subcommand(
+            Command::new("snipe")
+                .about("configure sniper for the reservation")
+        );;
 
     // parse cli
     let matches = cli.get_matches();
@@ -61,30 +75,56 @@ async fn main() -> Result<()> {
         }
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one::<String>("url").map(String::as_str);
-            resy_client.get_venue_info(url).await;
+            let date = sub_matches.get_one::<String>("date").map(String::as_str);
+
+            match resy_client.view_venue(url, date).await {
+                Ok(_) => println!("Venue details loaded successfully."),
+                Err(e) => println!("Failed to load venue details: {}", e),
+            }
         }
         Some(("load", _)) => {
             let mut input_string = String::new();
             println!(">> Enter API Key: ");
             io::stdout().flush().expect("Failed to flush stdout");
             io::stdin().read_line(&mut input_string).expect("Failed to read line");
-            let api_key = input_string.trim().to_string();
+            let api_key = input_string.trim().to_string().clone();
 
             input_string.clear();
             println!(">> Enter Auth Token: ");
             io::stdout().flush().expect("Failed to flush stdout");
             io::stdin().read_line(&mut input_string).expect("Failed to read line");
-            let auth_token = input_string.trim().to_string();
+            let auth_token = input_string.trim().to_string().clone();
 
-            marks_config.api_key = api_key;
-            marks_config.auth_token = auth_token;
+            resy_client.config.api_key = api_key;
+            resy_client.config.auth_token = auth_token;
 
-            config::write_config(&marks_config, Some(&config_path)).context("Failed to write config")?;
-            resy_client.load_config(marks_config);
             println!("Successfully loaded .marksman.config!");
+        }
+        Some(("state", _)) => {
+            let curr_config = config::read_config(&config_path);
+
+            match curr_config {
+                Ok(config) => {
+                    println!("Current Configuration:\n {:?}", config);
+                }
+                Err(e) => {
+                    println!("Error reading config: {}", e);
+                }
+            }
         }
         _ => {} // handle new commands
     }
 
+    config::write_config(&resy_client.config, Some(&config_path)).context("Failed to write config")?;
     Ok(())
+}
+
+
+pub fn validate_date_format(val: &str) -> Result<(), String> {
+    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
+    if re.is_match(val) {
+        Ok(())
+    } else {
+        Err(String::from("Date must be in YYYY-MM-DD format"))
+    }
 }
