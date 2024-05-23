@@ -1,7 +1,4 @@
 use std::error::Error;
-use prettytable::{row, Table};
-use prettytable::cell::Cell;
-use prettytable::row::Row;
 use reqwest::{Client, Response};
 use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 use serde_json::{json, Value};

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Serialize, Deserialize};
 use toml;
-use chrono::{Utc, Duration, Date};
+use chrono::{Utc, Duration};
 
 
 #[derive(Serialize, Deserialize, Debug)]

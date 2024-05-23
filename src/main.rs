@@ -12,7 +12,7 @@ mod resy_api_gateway;
 #[tokio::main]
 async fn main() -> Result<()> {
     let config_path = config::get_config_path().context("Failed to get config path")?;
-    let mut marks_config = config::read_config(&config_path)
+    let marks_config = config::read_config(&config_path)
         .expect("Failed to load configuration");
 
     let mut resy_client = ResyClient::from_config(marks_config);
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("snipe")
                 .about("configure sniper for the reservation")
-        );;
+        );
 
     // parse cli
     let matches = cli.get_matches();

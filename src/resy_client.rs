@@ -1,6 +1,5 @@
 use std::error::Error;
-use chrono::{Duration, NaiveDate, Utc};
-use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE, AUTHORIZATION};
+use chrono::{NaiveDate};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
 use prettytable::row::Row;
