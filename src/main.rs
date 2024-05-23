@@ -42,9 +42,16 @@ async fn main() -> Result<()> {
                 )
                 .arg(
                     Arg::new("date")
-                        .help("Target date for Resy booking")
+                        .help("Target date for Resy booking (YYYY-MM-DD)")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
                         .short('d')
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("target-time")
+                        .help("Target time for Resy booking (HHMM)")
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                        .short('t')
                         .required(false),
                 ),
         )
@@ -76,8 +83,9 @@ async fn main() -> Result<()> {
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one::<String>("url").map(String::as_str);
             let date = sub_matches.get_one::<String>("date").map(String::as_str);
+            let target_time = sub_matches.get_one::<String>("target-time").map(String::as_str);
 
-            match resy_client.view_venue(url, date).await {
+            match resy_client.view_venue(url, date, target_time).await {
                 Ok(_) => println!("Venue details loaded successfully."),
                 Err(e) => println!("Failed to load venue details: {}", e),
             }

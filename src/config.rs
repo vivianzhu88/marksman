@@ -14,6 +14,7 @@ pub struct Config {
     pub venue_id: String,
     pub date: String,
     pub party_size: u8,
+    pub target_time: Option<String>
 }
 
 impl Default for Config {
@@ -25,6 +26,7 @@ impl Default for Config {
             venue_id: String::new(),
             date: one_week_later.format("%Y-%m-%d").to_string(),
             party_size: 2,
+            target_time: None,
         }
     }
 }

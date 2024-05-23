@@ -69,7 +69,7 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
-    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
+    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>, target_time: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
         if let Some(url) = url {
             let _ = self.load_venue_id_from_url(url).await?;
         }
@@ -78,6 +78,20 @@ impl ResyClient {
             let parsed_date = NaiveDate::parse_from_str(date, "%Y-%m-%d")
                 .map_err(|_| ResyClientError::InvalidInput("Invalid date format. Please use YYYY-MM-DD.".to_string()))?;
             self.config.date = parsed_date.to_string();
+        }
+
+        if let Some(target_time) = target_time {
+            if target_time.len() == 4 && target_time.chars().all(|c| c.is_digit(10)) {
+                let hours = &target_time[..2].parse::<u32>().unwrap();
+                let minutes = &target_time[2..].parse::<u32>().unwrap();
+                if *hours < 24 && *minutes < 60 {
+                    self.config.target_time = Some(target_time.to_string());
+                } else {
+                    return Err(ResyClientError::InvalidInput("Invalid time format. Please use HHMM format, where HH is 00 to 23 and MM is 00 to 59.".to_string()));
+                }
+            } else {
+                return Err(ResyClientError::InvalidInput("Invalid time format. Please use HHMM format, where HH is 00 to 23 and MM is 00 to 59.".to_string()));
+            }
         }
 
         let slots = self.find_reservation_slots().await?;
@@ -112,7 +126,7 @@ impl ResyClient {
     }
 
     async fn find_reservation_slots(&mut self) -> ResyResult<Vec<Value>> {
-        match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size, None).await {
+        match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size, self.config.target_time.as_deref()).await {
             Ok(json) => {
                 if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
                     let mut summarized = Vec::new();
