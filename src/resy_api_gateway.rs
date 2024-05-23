@@ -98,8 +98,14 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
-    pub async fn find_reservation(&self, venue_id: &str, day: &str, party_size: u8) -> Result<Value, Box<dyn Error>> {
-        let url = format!("{}/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", RESY_API_BASE_URL, day, party_size, venue_id);
+    pub async fn find_reservation(&self, venue_id: &str, day: &str, party_size: u8, target_time: Option<&str>) -> Result<Value, Box<dyn Error>> {
+        let mut url = format!("{}/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", RESY_API_BASE_URL, day, party_size, venue_id);
+
+        if let Some(time) = target_time {
+            let formatted_time = format!("{}:{}", &time[..2], &time[2..]);
+            url = format!("{}&time_filter={}", url, formatted_time);
+        }
+
         let headers = self.setup_headers();
 
         let res = self.client.get(url)

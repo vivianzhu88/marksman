@@ -89,6 +89,7 @@ impl ResyClient {
 
     pub(crate) async fn run_snipe(&mut self) -> ResyResult<String> {
 
+
         Ok("Placeholder fuck errors".to_string())
     }
 
@@ -112,7 +113,7 @@ impl ResyClient {
     }
 
     async fn find_reservation_slots(&mut self) -> ResyResult<Vec<Value>> {
-        match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size).await {
+        match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size, None).await {
             Ok(json) => {
                 if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
                     let mut summarized = Vec::new();
@@ -121,7 +122,7 @@ impl ResyClient {
                             Some(config),
                             Some(date),
                             Some(size),
-                            Some(quantity),
+                            Some(quantity)
                             // Some(payment)
                         ) = (
                             slot["config"].as_object(),
