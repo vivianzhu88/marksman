@@ -50,6 +50,13 @@ async fn main() -> Result<()> {
                         .required(false),
                 )
                 .arg(
+                    Arg::new("party-size")
+                        .help("Party size for Resy booking")
+                        .value_parser(clap::value_parser!(u8))
+                        .short('p')
+                        .required(false),
+                )
+                .arg(
                     Arg::new("target-time")
                         .help("Target time for Resy booking (HHMM)")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
@@ -83,11 +90,12 @@ async fn main() -> Result<()> {
             }
         }
         Some(("venue", sub_matches)) => {
-            let url = sub_matches.get_one::<String>("url").map(String::as_str);
-            let date = sub_matches.get_one::<String>("date").map(String::as_str);
-            let target_time = sub_matches.get_one::<String>("target-time").map(String::as_str);
+            let url = sub_matches.get_one("url").map(String::as_str);
+            let date = sub_matches.get_one("date").map(String::as_str);
+            let party_size = sub_matches.get_one("party-size").copied();
+            let target_time = sub_matches.get_one("target-time").map(String::as_str);
 
-            match resy_client.view_venue(url, date, target_time).await {
+            match resy_client.view_venue(url, date, party_size, target_time).await {
                 Ok((_, slots)) => {
                     println!("venue details loaded successfully");
                     view_utils::print_table(&slots);

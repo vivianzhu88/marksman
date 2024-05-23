@@ -69,7 +69,7 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
-    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>, target_time: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
+    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>, party_size: Option<u8>, target_time: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
         if let Some(url) = url {
             let _ = self.load_venue_id_from_url(url).await?;
         }
@@ -78,6 +78,10 @@ impl ResyClient {
             let parsed_date = NaiveDate::parse_from_str(date, "%Y-%m-%d")
                 .map_err(|_| ResyClientError::InvalidInput("Invalid date format. Please use YYYY-MM-DD.".to_string()))?;
             self.config.date = parsed_date.to_string();
+        }
+
+        if let Some(party_size) = party_size {
+            self.config.party_size = party_size;
         }
 
         if let Some(target_time) = target_time {
@@ -92,6 +96,8 @@ impl ResyClient {
             } else {
                 return Err(ResyClientError::InvalidInput("Invalid time format. Please use HHMM format, where HH is 00 to 23 and MM is 00 to 59.".to_string()));
             }
+        } else {
+            self.config.target_time = None;
         }
 
         let slots = self.find_reservation_slots().await?;
