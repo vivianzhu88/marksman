@@ -1,3 +1,4 @@
+#[macro_use] extern crate prettytable;
 use std::io;
 use clap::{Command, Arg};
 use std::io::Write;
@@ -8,6 +9,7 @@ use resy_client::ResyClient;
 mod resy_client;
 mod config;
 mod resy_api_gateway;
+mod view_utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -86,7 +88,10 @@ async fn main() -> Result<()> {
             let target_time = sub_matches.get_one::<String>("target-time").map(String::as_str);
 
             match resy_client.view_venue(url, date, target_time).await {
-                Ok(_) => println!("Venue details loaded successfully."),
+                Ok((_, slots)) => {
+                    println!("venue details loaded successfully");
+                    view_utils::print_table(&slots);
+                },
                 Err(e) => println!("Failed to load venue details: {}", e),
             }
         }
@@ -125,14 +130,4 @@ async fn main() -> Result<()> {
 
     config::write_config(&resy_client.config, Some(&config_path)).context("Failed to write config")?;
     Ok(())
-}
-
-
-pub fn validate_date_format(val: &str) -> Result<(), String> {
-    let re = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
-    if re.is_match(val) {
-        Ok(())
-    } else {
-        Err(String::from("Date must be in YYYY-MM-DD format"))
-    }
 }

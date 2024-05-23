@@ -195,35 +195,3 @@ fn extract_venue_slug(url: &str) -> ResyResult<String> {
     }
     Err(ResyClientError::InvalidInput("invalid resy url".to_string()))
 }
-
-fn print_table(slots: &[Value]) {
-    let mut table = Table::new();
-
-    table.add_row(row!["Type", "Start", "End", "ID", "Token"]);
-
-    for slot in slots {
-        if let (Some(slot_type), Some(start), Some(end), Some(id), Some(token)) = (
-            slot.get("type"),
-            slot.get("start"),
-            slot.get("end"),
-            slot.get("id"),
-            slot.get("token"),
-        ) {
-            let id_str = if id.is_number() {
-                id.to_string()
-            } else {
-                id.as_str().unwrap_or("").to_string()
-            };
-
-            table.add_row(Row::new(vec![
-                Cell::new(slot_type.as_str().unwrap_or("")),
-                Cell::new(start.as_str().unwrap_or("")),
-                Cell::new(end.as_str().unwrap_or("")),
-                Cell::new(&id_str),
-                Cell::new(token.as_str().unwrap_or("")),
-            ]));
-        }
-    }
-
-    table.printstd();
-}
