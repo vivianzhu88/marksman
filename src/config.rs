@@ -9,19 +9,33 @@ use chrono::{Utc, Duration};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Config {
+    #[serde(default)]
     pub api_key: String,
+
+    #[serde(default)]
     pub auth_token: String,
+
+    #[serde(default)]
     pub venue_id: String,
+
+    #[serde(default = "_default_date")]
     pub date: String,
+
+    #[serde(default = "_default_party_size")]
     pub party_size: u8,
+
     pub target_time: Option<String>,
-    #[serde(default = "default_payment_id")]
+
+    #[serde(default)]
     pub payment_id: String
 }
 
-fn default_payment_id() -> String {
-    "init-payment-id".to_string()
+fn _default_date() -> String {
+    let one_week_later = Utc::now().date_naive() + Duration::days(7);
+    one_week_later.format("%Y-%m-%d").to_string()
 }
+
+const fn _default_party_size() -> u8 { 2 }
 
 impl Default for Config {
     fn default() -> Self {
