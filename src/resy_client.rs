@@ -112,6 +112,32 @@ impl ResyClient {
         Ok("Placeholder fuck errors".to_string())
     }
 
+    pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
+        match self.api_gateway.get_user().await {
+            Ok(user_data) => {
+                let payment_methods = user_data["payment_methods"]
+                    .as_array()
+                    .ok_or_else(|| ResyClientError::NotFound("No payment method found in resy account".to_string()))?;
+
+                println!("{:?}", payment_methods);
+                let payment_id = payment_methods.get(0)
+                    .ok_or_else(|| ResyClientError::NotFound("Payment method list is empty".to_string()))?
+                    .get("id")
+                    .and_then(|id| id.as_i64())
+                    .map(|id| id.to_string())
+                    .ok_or_else(|| ResyClientError::NotFound("Payment ID not found".to_string()))?;
+
+                self.config.payment_id = payment_id.clone();
+                Ok(payment_id)
+            }
+            Err(e) => {
+                Err(ResyClientError::ApiError(format!("Error fetching payment_id: {:?}", e)))
+            }
+        }
+
+
+    }
+
     async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<u64> {
         let venue_slug = extract_venue_slug(url)?;
 

@@ -41,6 +41,7 @@ async fn main() -> Result<()> {
                         .help("url to Resy booking page")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
                         .short('u')
+                        .long("url")
                         .required(false),
                 )
                 .arg(
@@ -48,6 +49,7 @@ async fn main() -> Result<()> {
                         .help("Target date for Resy booking (YYYY-MM-DD)")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
                         .short('d')
+                        .long("date")
                         .required(false),
                 )
                 .arg(
@@ -55,6 +57,7 @@ async fn main() -> Result<()> {
                         .help("Party size for Resy booking")
                         .value_parser(clap::value_parser!(u8))
                         .short('p')
+                        .long("party-size")
                         .required(false),
                 )
                 .arg(
@@ -62,6 +65,7 @@ async fn main() -> Result<()> {
                         .help("Target time for Resy booking (HHMM)")
                         .value_parser(clap::builder::NonEmptyStringValueParser::new())
                         .short('t')
+                        .long("target-time")
                         .required(false),
                 ),
         )
@@ -72,6 +76,7 @@ async fn main() -> Result<()> {
                     Arg::new("skip")
                         .help("skip loading new credentials (sets payment id)")
                         .short('s')
+                        .long("skip")
                         .action(ArgAction::SetTrue),
                 ),
         )
@@ -110,8 +115,8 @@ async fn main() -> Result<()> {
                 Err(e) => println!("Failed to load venue details: {}", e),
             }
         }
-        Some(("load", _)) => {
-            if !matches.get_flag("skip") {
+        Some(("load", sub_matches)) => {
+            if !sub_matches.get_flag("skip") {
                 let mut input_string = String::new();
                 println!(">> Enter API Key: ");
                 io::stdout().flush().expect("Failed to flush stdout");
@@ -129,6 +134,12 @@ async fn main() -> Result<()> {
 
                 println!("Successfully loaded .marksman.config!");
             }
+
+            match resy_client.get_payment_id().await {
+                Ok(payment_id) => println!("Payment id found: {}", payment_id),
+                Err(e) => println!("Failed to load payment_id: {}", e),
+            }
+
         }
         Some(("state", _)) => {
             let curr_config = config::read_config(&config_path);
