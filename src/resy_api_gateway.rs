@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 const RESY_API_BASE_URL: &str = "https://api.resy.com";
 
 
-// Define Resy API Error
+/// Error type for Resy API specific errors.
 #[derive(Debug)]
 pub struct ResyAPIError {
     pub message: String,
@@ -28,7 +28,7 @@ impl From<std::io::Error> for ResyAPIError {
     }
 }
 
-// Resy API Gateway
+/// Handles communication with the Resy API.
 #[derive(Debug)]
 pub struct ResyAPIGateway {
     client: Client,
@@ -37,6 +37,8 @@ pub struct ResyAPIGateway {
 }
 
 impl ResyAPIGateway {
+
+    /// Creates a new API gateway instance (without authentication)
     pub fn new() -> Self {
         ResyAPIGateway {
             client: Client::new(),
@@ -45,6 +47,7 @@ impl ResyAPIGateway {
         }
     }
 
+    /// Creates a new API gateway instance with authentication.
     pub fn from_auth(api_key: String, auth_token: String) -> Self {
         ResyAPIGateway {
             client: Client::new(),
@@ -53,6 +56,7 @@ impl ResyAPIGateway {
         }
     }
 
+    /// Processes the HTTP response, converting JSON or returning an error.
     async fn process_response(response: Response) -> Result<Value, Box<dyn Error>> {
         if response.status().is_success() {
             let json = response.json().await?;
@@ -64,6 +68,7 @@ impl ResyAPIGateway {
         }
     }
 
+    /// Sets up the necessary auth headers for making requests to the Resy API.
     fn setup_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key)).unwrap());
@@ -71,6 +76,7 @@ impl ResyAPIGateway {
         headers
     }
 
+    /// Fetches user details from the Resy API.
     pub async fn get_user(&self) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}/2/user", RESY_API_BASE_URL);
         let headers = self.setup_headers();
@@ -83,6 +89,7 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
+    /// Retrieves details about a venue from the Resy API.
     pub async fn get_venue(&self, venue_slug: &str) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}/3/venue?url_slug={}&location=new-york-ny", RESY_API_BASE_URL, venue_slug);
         let headers = self.setup_headers();
@@ -95,6 +102,7 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
+    /// Finds reservations at a venue.
     pub async fn find_reservation(&self, venue_id: &str, day: &str, party_size: u8, target_time: Option<&str>) -> Result<Value, Box<dyn Error>> {
         let mut url = format!("{}/4/find?lat=0&long=0&day={}&party_size={}&venue_id={}", RESY_API_BASE_URL, day, party_size, venue_id);
 
@@ -113,6 +121,7 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
+    /// Gets reservation details from the Resy API.
     pub async fn get_reservation_details(
         &self,
         commit: u8, // 0 for dry run, 1 for token gen
@@ -139,6 +148,7 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
+    /// Books reservation via the Resy API (dry run possible)
     pub async fn book_reservation(&self, book_token: &str, payment_id: i32) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}/3/book", RESY_API_BASE_URL);
         let headers = self.setup_headers();
