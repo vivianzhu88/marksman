@@ -14,7 +14,13 @@ pub struct Config {
     pub venue_id: String,
     pub date: String,
     pub party_size: u8,
-    pub target_time: Option<String>
+    pub target_time: Option<String>,
+    #[serde(default = "default_payment_id")]
+    pub payment_id: String
+}
+
+fn default_payment_id() -> String {
+    "init-payment-id".to_string()
 }
 
 impl Default for Config {
@@ -27,6 +33,7 @@ impl Default for Config {
             date: one_week_later.format("%Y-%m-%d").to_string(),
             party_size: 2,
             target_time: None,
+            payment_id: String::new(),
         }
     }
 }
