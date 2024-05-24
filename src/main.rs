@@ -1,6 +1,6 @@
 #[macro_use] extern crate prettytable;
 use std::io;
-use clap::{Command, Arg};
+use clap::{Command, Arg, ArgAction};
 use std::io::Write;
 use anyhow::{Context, Result};
 use regex::Regex;
@@ -19,6 +19,7 @@ async fn main() -> Result<()> {
 
     let mut resy_client = ResyClient::from_config(marks_config);
 
+    // define cli commands
     let cli = Command::new("marksman")
         .version("0.1")
         .author("Anish Agrawal")
@@ -67,6 +68,12 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("load")
                 .about("Load auth credentials for Resy API")
+                .arg(
+                    Arg::new("skip")
+                        .help("skip loading new credentials (sets payment id)")
+                        .short('s')
+                        .action(ArgAction::SetTrue),
+                ),
         )
         .subcommand(
             Command::new("state")
@@ -104,29 +111,34 @@ async fn main() -> Result<()> {
             }
         }
         Some(("load", _)) => {
-            let mut input_string = String::new();
-            println!(">> Enter API Key: ");
-            io::stdout().flush().expect("Failed to flush stdout");
-            io::stdin().read_line(&mut input_string).expect("Failed to read line");
-            let api_key = input_string.trim().to_string().clone();
+            if !matches.get_flag("skip") {
+                let mut input_string = String::new();
+                println!(">> Enter API Key: ");
+                io::stdout().flush().expect("Failed to flush stdout");
+                io::stdin().read_line(&mut input_string).expect("Failed to read line");
+                let api_key = input_string.trim().to_string().clone();
 
-            input_string.clear();
-            println!(">> Enter Auth Token: ");
-            io::stdout().flush().expect("Failed to flush stdout");
-            io::stdin().read_line(&mut input_string).expect("Failed to read line");
-            let auth_token = input_string.trim().to_string().clone();
+                input_string.clear();
+                println!(">> Enter Auth Token: ");
+                io::stdout().flush().expect("Failed to flush stdout");
+                io::stdin().read_line(&mut input_string).expect("Failed to read line");
+                let auth_token = input_string.trim().to_string().clone();
 
-            resy_client.config.api_key = api_key;
-            resy_client.config.auth_token = auth_token;
+                resy_client.config.api_key = api_key;
+                resy_client.config.auth_token = auth_token;
 
-            println!("Successfully loaded .marksman.config!");
+                println!("Successfully loaded .marksman.config!");
+            }
         }
         Some(("state", _)) => {
             let curr_config = config::read_config(&config_path);
 
             match curr_config {
                 Ok(config) => {
-                    println!("Current Configuration:\n {:?}", config);
+                    match serde_json::to_string_pretty(&config) {
+                        Ok(json_string) => println!("Current Configuration:\n{}", json_string),
+                        Err(e) => println!("Failed to serialize config: {}", e),
+                    }
                 }
                 Err(e) => {
                     println!("Error reading config: {}", e);
