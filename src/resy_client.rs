@@ -140,6 +140,7 @@ impl ResyClient {
 
     async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<u64> {
         let venue_slug = extract_venue_slug(url)?;
+        self.config.venue_slug = venue_slug.clone();
 
         match self.api_gateway.get_venue(venue_slug.as_str()).await {
             Ok(venue_info) => {

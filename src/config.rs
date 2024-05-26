@@ -18,6 +18,9 @@ pub struct Config {
     #[serde(default)]
     pub venue_id: String,
 
+    #[serde(default)]
+    pub venue_slug: String,
+
     #[serde(default = "_default_date")]
     pub date: String,
 
@@ -44,6 +47,7 @@ impl Default for Config {
             api_key: String::new(),
             auth_token: String::new(),
             venue_id: String::new(),
+            venue_slug: String::new(),
             date: one_week_later.format("%Y-%m-%d").to_string(),
             party_size: 2,
             target_time: None,

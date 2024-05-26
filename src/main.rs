@@ -156,6 +156,9 @@ async fn main() -> Result<()> {
                 }
             }
         }
+        Some(("snipe", _)) => {
+
+        }
         _ => {} // handle new commands
     }
 
