@@ -107,24 +107,37 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    // pub(crate) async fn run_snipe(&self) -> ResyResult<String> {
-    //     if !self.config.validate() {
-    //         return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
-    //     }
-    //
-    //     Ok("Placeholder for compilation".to_string())
-    // }
-    //
-    // async fn _snipe_task(&self, config_id: &str) -> bool {
-    //     match self.api_gateway.get_reservation_details(1, config_id, self.config.party_size, &self.config.date) {
-    //         Ok(res) => {
-    //             println!("{:#?}", res);
-    //         }
-    //         _ => {}
-    //     }
-    //
-    //     return true
-    // }
+    pub(crate) async fn run_snipe(&self) -> ResyResult<String> {
+        if !self.config.validate() {
+            return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
+        }
+
+        let slots = match self.api_gateway.find_reservation(
+            self.config.venue_id.as_str(),
+            self.config.date.as_str(),
+            self.config.party_size,
+            self.config.target_time.as_deref()
+        ).await {
+            Ok(json) => match format_slots(json) {
+                Ok(slots) => slots,
+                Err(e) => panic!("Error formatting reservation slots: {:?}", e),
+            },
+            Err(e) => {
+                panic!("Error formatting reservation slots: {:?}", e),
+            }
+        };
+
+        Ok("Placeholder for compilation".to_string())
+    }
+
+    async fn _snipe_task(&self, config_id: &str) -> bool {
+        let slots = match self.api_gateway.get_reservation_details(1, config_id, self.config.party_size, &self.config.date).await {
+            Ok(json) => {}
+            Err(e) => {}
+        };
+
+        return true
+    }
 
     pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
         match self.api_gateway.get_user().await {
