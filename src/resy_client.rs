@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::future::Future;
 use chrono::{NaiveDate};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
@@ -106,11 +107,24 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    pub(crate) async fn run_snipe(&mut self) -> ResyResult<String> {
-
-
-        Ok("Placeholder fuck errors".to_string())
-    }
+    // pub(crate) async fn run_snipe(&self) -> ResyResult<String> {
+    //     if !self.config.validate() {
+    //         return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
+    //     }
+    //
+    //     Ok("Placeholder for compilation".to_string())
+    // }
+    //
+    // async fn _snipe_task(&self, config_id: &str) -> bool {
+    //     match self.api_gateway.get_reservation_details(1, config_id, self.config.party_size, &self.config.date) {
+    //         Ok(res) => {
+    //             println!("{:#?}", res);
+    //         }
+    //         _ => {}
+    //     }
+    //
+    //     return true
+    // }
 
     pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
         match self.api_gateway.get_user().await {
@@ -134,8 +148,6 @@ impl ResyClient {
                 Err(ResyClientError::ApiError(format!("Error fetching payment_id: {:?}", e)))
             }
         }
-
-
     }
 
     async fn load_venue_id_from_url(&mut self, url: &str) -> ResyResult<u64> {
@@ -158,60 +170,9 @@ impl ResyClient {
         }
     }
 
-    async fn find_reservation_slots(&mut self) -> ResyResult<Vec<Value>> {
+    async fn find_reservation_slots(&self) -> ResyResult<Vec<Value>> {
         match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size, self.config.target_time.as_deref()).await {
-            Ok(json) => {
-                if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
-                    let mut summarized = Vec::new();
-                    for slot in slot_info {
-                        if let (
-                            Some(config),
-                            Some(date),
-                            Some(size),
-                            Some(quantity)
-                            // Some(payment)
-                        ) = (
-                            slot["config"].as_object(),
-                            slot["date"].as_object(),
-                            slot["size"].as_object(),
-                            slot["quantity"].as_u64(),
-                            // slot["payment"].as_object()
-                        ) {
-                            if let (
-                                Some(id),
-                                Some(token),
-                                Some(slot_type),
-                                Some(start),
-                                Some(end),
-                                Some(min_size),
-                                Some(max_size)
-                            ) = (
-                                config.get("id"),
-                                config.get("token"),
-                                config.get("type"),
-                                date.get("start"), // format: "2024-05-28 13:00:00"
-                                date.get("end"),
-                                size.get("min"),
-                                size.get("max")
-                            ) {
-                                summarized.push(json!({
-                                    "id": id,
-                                    "token": token,
-                                    "type": slot_type,
-                                    "start": start,
-                                    "end": end,
-                                    "min_size": min_size,
-                                    "max_size": max_size,
-                                    "quantity": quantity,
-                                }));
-                            }
-                        }
-                    }
-                    Ok(summarized)
-                } else {
-                    Ok(Vec::new())
-                }
-            }
+            Ok(json) => format_slots(json),
             Err(e) => {
                 Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
             }
@@ -227,4 +188,55 @@ fn extract_venue_slug(url: &str) -> ResyResult<String> {
         return Ok(url[start..start + end].to_string());
     }
     Err(ResyClientError::InvalidInput("invalid resy url".to_string()))
+}
+
+fn format_slots(json: Value) -> ResyResult<Vec<Value>> {
+    if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
+        let mut summarized = Vec::new();
+        for slot in slot_info {
+            if let (
+                Some(config),
+                Some(date),
+                Some(size),
+                Some(quantity)
+            ) = (
+                slot["config"].as_object(),
+                slot["date"].as_object(),
+                slot["size"].as_object(),
+                slot["quantity"].as_u64()
+            ) {
+                if let (
+                    Some(id),
+                    Some(token),
+                    Some(slot_type),
+                    Some(start),
+                    Some(end),
+                    Some(min_size),
+                    Some(max_size)
+                ) = (
+                    config.get("id"),
+                    config.get("token"),
+                    config.get("type"),
+                    date.get("start"), // format: "2024-05-28 13:00:00"
+                    date.get("end"),
+                    size.get("min"),
+                    size.get("max")
+                ) {
+                    summarized.push(json!({
+                        "id": id,
+                        "token": token,
+                        "type": slot_type,
+                        "start": start,
+                        "end": end,
+                        "min_size": min_size,
+                        "max_size": max_size,
+                        "quantity": quantity,
+                    }));
+                }
+            }
+        }
+        Ok(summarized)
+    } else {
+        Ok(Vec::new())
+    }
 }

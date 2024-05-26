@@ -56,6 +56,16 @@ impl Default for Config {
     }
 }
 
+impl Config {
+    pub(crate) fn validate(&self) -> bool {
+        !self.api_key.is_empty() &&
+        !self.auth_token.is_empty() &&
+        !self.venue_id.is_empty() &&
+        !self.date.is_empty() &&
+        self.party_size > 0
+    }
+}
+
 pub fn reset(path: &Path) -> Result<()> {
     if path.exists() {
         fs::remove_file(path).context("Failed to delete config file")?;
