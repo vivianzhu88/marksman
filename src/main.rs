@@ -142,18 +142,9 @@ async fn main() -> Result<()> {
 
         }
         Some(("state", _)) => {
-            let curr_config = config::read_config(&config_path);
-
-            match curr_config {
-                Ok(config) => {
-                    match serde_json::to_string_pretty(&config) {
-                        Ok(json_string) => println!("Current Configuration:\n{}", json_string),
-                        Err(e) => println!("Failed to serialize config: {}", e),
-                    }
-                }
-                Err(e) => {
-                    println!("Error reading config: {}", e);
-                }
+            match serde_json::to_string_pretty(&resy_client.config) {
+                Ok(json_string) => println!("Current Configuration:\n{}", json_string),
+                Err(e) => println!("Failed to serialize config: {}", e),
             }
         }
         Some(("snipe", _)) => {
