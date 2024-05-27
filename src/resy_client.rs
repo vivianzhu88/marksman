@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
 use prettytable::row::Row;
 use prettytable::cell::Cell;
+use tokio::task::JoinSet;
 use crate::config::Config;
 use crate::resy_api_gateway::ResyAPIGateway;
 
@@ -123,15 +124,39 @@ impl ResyClient {
                 Err(e) => panic!("Error formatting reservation slots: {:?}", e),
             },
             Err(e) => {
-                panic!("Error formatting reservation slots: {:?}", e),
+                panic!("Error formatting reservation slots: {:?}", e)
             }
         };
+
+        let mut handles = vec![];
+
+        let mut set = JoinSet::new();
+
+        for slot in slots {
+            // Only spawn tasks if the slot has a valid 'config_id'
+            if let Some(config_id) = slot["id"].as_str() {
+                let handle = tokio::spawn(async move {
+                    self._snipe_task(config_id).await
+                });
+                handles.push(handle);
+
+                set.spawn(async move {
+                    self._snipe_task(config_id).await
+                });
+
+
+            } else {
+                println!("Skipping slot with missing 'id'");
+            }
+        }
+
+        let results = join_all(handles).await;
 
         Ok("Placeholder for compilation".to_string())
     }
 
     async fn _snipe_task(&self, config_id: &str) -> bool {
-        let slots = match self.api_gateway.get_reservation_details(1, config_id, self.config.party_size, &self.config.date).await {
+        let slots = match self.api_gateway.get_reservation_details(0, config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {}
             Err(e) => {}
         };
