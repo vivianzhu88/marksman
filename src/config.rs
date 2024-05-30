@@ -56,6 +56,21 @@ impl Default for Config {
     }
 }
 
+impl Clone for Config {
+    fn clone(&self) -> Self {
+        Config {
+            api_key: self.api_key.clone(),
+            auth_token: self.auth_token.clone(),
+            venue_id: self.venue_id.clone(),
+            venue_slug: self.venue_slug.clone(),
+            date: self.date.clone(),
+            party_size: self.party_size,
+            target_time: self.target_time.clone(),
+            payment_id: self.payment_id.clone(),
+        }
+    }
+}
+
 impl Config {
     pub(crate) fn validate(&self) -> bool {
         !self.api_key.is_empty() &&
