@@ -5,6 +5,7 @@ use std::io::Write;
 use anyhow::{Context, Result};
 use regex::Regex;
 use resy_client::ResyClient;
+use std::sync::Arc;
 
 mod resy_client;
 mod config;
@@ -149,8 +150,12 @@ async fn main() -> Result<()> {
         }
         Some(("snipe", _)) => {
 
+            let temp_resy_client = Arc::new(resy_client);
+            match temp_resy_client.run_snipe().await {
+                _ => println!("done")
+            }
 
-
+            return Ok(())
         }
         _ => {} // handle new commands
     }

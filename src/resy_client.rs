@@ -1,11 +1,12 @@
 use std::error::Error;
-use std::future::Future;
+use std::sync::Arc;
+use futures::future::join_all;
 use chrono::{NaiveDate};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
 use prettytable::row::Row;
 use prettytable::cell::Cell;
-use tokio::task::JoinSet;
+use tokio::join;
 use crate::config::Config;
 use crate::resy_api_gateway::ResyAPIGateway;
 
@@ -108,7 +109,7 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    pub(crate) async fn run_snipe(&self) -> ResyResult<String> {
+    pub(crate) async fn run_snipe(self: Arc<ResyClient>) -> ResyResult<String> {
         if !self.config.validate() {
             return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
         }
@@ -127,39 +128,31 @@ impl ResyClient {
                 panic!("Error formatting reservation slots: {:?}", e)
             }
         };
-
-        let mut handles = vec![];
-
-        let mut set = JoinSet::new();
+        
+        let mut tasks = vec![];
 
         for slot in slots {
             // Only spawn tasks if the slot has a valid 'config_id'
-            if let Some(config_id) = slot["id"].as_str() {
-                let handle = tokio::spawn(async move {
-                    self._snipe_task(config_id).await
-                });
-                handles.push(handle);
+            let cloned_config_id = slot["id"].to_string().clone();
+            let self_clone: Arc<ResyClient> = Arc::clone(&self);
 
-                set.spawn(async move {
-                    self._snipe_task(config_id).await
-                });
-
-
-            } else {
-                println!("Skipping slot with missing 'id'");
-            }
+            tasks.push(tokio::spawn(async move {
+                self_clone._snipe_task(cloned_config_id).await
+            }));
         }
 
-        let results = join_all(handles).await;
+        let results = join_all(tasks).await;
 
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _snipe_task(&self, config_id: &str) -> bool {
-        let slots = match self.api_gateway.get_reservation_details(0, config_id, self.config.party_size, &self.config.date).await {
-            Ok(json) => {}
-            Err(e) => {}
-        };
+    async fn _snipe_task(&self, config_id: String) -> bool {
+        // let slots = match self.api_gateway.get_reservation_details(0, config_id, self.config.party_size, &self.config.date).await {
+        //     Ok(json) => {}
+        //     Err(e) => {}
+        // };
+
+        println!("Running snipe task {}", config_id);
 
         return true
     }
