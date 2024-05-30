@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::sync::Arc;
 use futures::future::join_all;
-use chrono::{NaiveDate};
+use chrono::{NaiveDate, NaiveTime, ParseError};
 use serde_json::{json, Value};
 use prettytable::{row, cell, Table};
 use prettytable::row::Row;
@@ -18,6 +18,7 @@ pub enum ResyClientError {
     ApiError(String),
     InternalError(String),
     InvalidInput(String),
+    ParseError(String),
 }
 
 impl std::fmt::Display for ResyClientError {
@@ -103,7 +104,10 @@ impl ResyClient {
             self.config.target_time = None;
         }
 
-        let slots = self.find_reservation_slots().await?;
+        let mut slots = self.find_reservation_slots().await?;
+        if let Some(target_time) = &self.config.target_time {
+            slots = sort_slots_by_closest_time(slots, target_time);
+        }
 
         let venue_id = self.config.venue_id.clone();
         Ok((venue_id, slots))
@@ -128,7 +132,7 @@ impl ResyClient {
                 panic!("Error formatting reservation slots: {:?}", e)
             }
         };
-        
+
         let mut tasks = vec![];
 
         for slot in slots {
@@ -147,10 +151,29 @@ impl ResyClient {
     }
 
     async fn _snipe_task(&self, config_id: String) -> bool {
-        // let slots = match self.api_gateway.get_reservation_details(0, config_id, self.config.party_size, &self.config.date).await {
-        //     Ok(json) => {}
-        //     Err(e) => {}
-        // };
+        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
+            Ok(json) => {
+                if json.get("book_token").is_some() {
+                    match json["book_token"]["value"].as_str() {
+                        Some(token) => token.to_string(),
+                        None => return false,
+                    }
+                } else {
+                    return false // didn't get it in time!
+                }
+            }
+            Err(e) => return false
+        };
+
+        let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+            Ok(json) => {
+                match json.get("resy_token") {
+                    Some(token) => token.to_string(),
+                    None => return false,
+                }
+            }
+            Err(e) => return false
+        };
 
         println!("Running snipe task {}", config_id);
 
@@ -271,3 +294,26 @@ fn format_slots(json: Value) -> ResyResult<Vec<Value>> {
         Ok(Vec::new())
     }
 }
+
+fn sort_slots_by_closest_time(slots: Vec<Value>, target_time: &str) -> Vec<Value> {
+    let target_time = match NaiveTime::parse_from_str(target_time, "%H%M") {
+        Ok(time) => time,
+        Err(_) => return Vec::new(), // Return an empty vector if there's a parsing error
+    };
+    // Sort the slots by the closest time to target_time
+    let mut slots_with_time: Vec<_> = slots.into_iter().filter_map(|slot| {
+        slot["start"].as_str()
+            .and_then(|start| NaiveTime::parse_from_str(&start[11..16], "%H:%M").ok())
+            .map(|time| (slot, time))
+    }).collect();
+
+    slots_with_time.sort_by_key(|(_, time)| {
+        let duration = if *time > target_time {
+            time.signed_duration_since(target_time)
+        } else {
+            target_time.signed_duration_since(*time)
+        };
+        duration.num_minutes().abs()
+    });
+
+    slots_with_time.into_iter().map(|(slot, _)| slot).collect()}

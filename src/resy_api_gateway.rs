@@ -149,7 +149,7 @@ impl ResyAPIGateway {
     }
 
     /// Books reservation via the Resy API (dry run possible)
-    pub async fn book_reservation(&self, book_token: &str, payment_id: i32) -> Result<Value, Box<dyn Error>> {
+    pub async fn book_reservation(&self, book_token: &str, payment_id: &str) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}/3/book", RESY_API_BASE_URL);
         let headers = self.setup_headers();
 
