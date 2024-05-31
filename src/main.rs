@@ -68,6 +68,12 @@ async fn main() -> Result<()> {
                         .short('t')
                         .long("target-time")
                         .required(false),
+                )
+                .arg(
+                    Arg::new("reset-time")
+                        .help("Reset target time for Resy booking (None)")
+                        .long("reset-time")
+                        .action(ArgAction::SetTrue),
                 ),
         )
         .subcommand(
@@ -106,7 +112,11 @@ async fn main() -> Result<()> {
             let url = sub_matches.get_one("url").map(String::as_str);
             let date = sub_matches.get_one("date").map(String::as_str);
             let party_size = sub_matches.get_one("party-size").copied();
-            let target_time = sub_matches.get_one("target-time").map(String::as_str);
+            let mut target_time = sub_matches.get_one("target-time").map(String::as_str);
+
+            if sub_matches.get_flag("reset-time") {
+                target_time = None;
+            }
 
             match resy_client.view_venue(url, date, party_size, target_time).await {
                 Ok((_, slots)) => {
