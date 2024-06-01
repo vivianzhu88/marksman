@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use futures::future::join_all;
 use chrono::{NaiveDate, NaiveTime, ParseError};
 use serde_json::{json, Value};
@@ -7,6 +8,7 @@ use prettytable::{row, cell, Table};
 use prettytable::row::Row;
 use prettytable::cell::Cell;
 use tokio::join;
+use tokio::sync::Mutex;
 use crate::config::Config;
 use crate::resy_api_gateway::ResyAPIGateway;
 
@@ -134,14 +136,21 @@ impl ResyClient {
         };
 
         let mut tasks = vec![];
+        let has_booked = Arc::new(AtomicBool::new(false));
+        let book_mutex = Arc::new(Mutex::new(()));
 
         for slot in slots {
             // Only spawn tasks if the slot has a valid 'config_id'
             let cloned_config_id = slot["id"].to_string().clone();
+            let start = slot["start"].to_string().clone();
             let self_clone: Arc<ResyClient> = Arc::clone(&self);
 
+            // locking
+            let book_mutex_clone = Arc::clone(&book_mutex);
+            let has_booked_clone = Arc::clone(&has_booked);
+
             tasks.push(tokio::spawn(async move {
-                self_clone._snipe_task(cloned_config_id).await
+                self_clone._snipe_task(cloned_config_id, book_mutex_clone, has_booked_clone).await
             }));
         }
 
@@ -150,8 +159,10 @@ impl ResyClient {
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _snipe_task(&self, config_id: String) -> bool {
-        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
+    async fn _snipe_task(&self, config_id: String, book_mutex: Arc<Mutex<()>>, has_booked: Arc<AtomicBool>) -> bool {
+        println!("Running snipe task {}", config_id);
+
+        let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {
                 if json.get("book_token").is_some() {
                     match json["book_token"]["value"].as_str() {
@@ -165,17 +176,25 @@ impl ResyClient {
             Err(e) => return false
         };
 
+        let _lock = book_mutex.lock().await;
+        if has_booked.load(Ordering::SeqCst) {
+            return false;
+        }
+
         let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
             Ok(json) => {
+                println!("{:?}", json);
                 match json.get("resy_token") {
-                    Some(token) => token.to_string(),
+                    Some(token) => {
+                        token.to_string();
+                        println!("acquired");
+                        has_booked.store(true, Ordering::SeqCst);
+                    },
                     None => return false,
                 }
             }
             Err(e) => return false
         };
-
-        println!("Running snipe task {}", config_id);
 
         return true
     }
