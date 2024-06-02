@@ -2,13 +2,12 @@ use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use futures::future::join_all;
-use chrono::{NaiveDate, NaiveTime, ParseError};
-use serde_json::{json, Value};
-use prettytable::{row, cell, Table};
-use prettytable::row::Row;
-use prettytable::cell::Cell;
-use tokio::join;
+use chrono::{NaiveDate, NaiveTime};
+use serde_json::{Value};
+use serde::Deserialize;
 use tokio::sync::Mutex;
+use rand;
+use rand::Rng;
 use crate::config::Config;
 use crate::resy_api_gateway::ResyAPIGateway;
 
@@ -75,7 +74,7 @@ impl ResyClient {
         self.api_gateway = ResyAPIGateway::from_auth(api_key_clone, auth_token_clone)
     }
 
-    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>, party_size: Option<u8>, target_time: Option<&str>) -> ResyResult<(String, Vec<Value>)> {
+    pub(crate) async fn view_venue(&mut self, url: Option<&str>, date: Option<&str>, party_size: Option<u8>, target_time: Option<&str>) -> ResyResult<(String, Vec<ResySlot>)> {
         if let Some(url) = url {
             let _ = self.load_venue_id_from_url(url).await?;
         }
@@ -106,7 +105,7 @@ impl ResyClient {
             self.config.target_time = None;
         }
 
-        let mut slots = self.find_reservation_slots().await?;
+        let mut slots = self._find_reservation_slots().await?;
         if let Some(target_time) = &self.config.target_time {
             slots = sort_slots_by_closest_time(slots, target_time);
         }
@@ -120,20 +119,11 @@ impl ResyClient {
             return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
         }
 
-        let slots = match self.api_gateway.find_reservation(
-            self.config.venue_id.as_str(),
-            self.config.date.as_str(),
-            self.config.party_size,
-            self.config.target_time.as_deref()
-        ).await {
-            Ok(json) => match format_slots(json) {
-                Ok(slots) => slots,
-                Err(e) => panic!("Error formatting reservation slots: {:?}", e),
-            },
-            Err(e) => {
-                panic!("Error formatting reservation slots: {:?}", e)
-            }
-        };
+        let mut slots = self._find_reservation_slots().await?;
+
+        if slots.is_empty() {
+            return Err(ResyClientError::NotFound("no reservation slots available".to_string()));
+        }
 
         let mut tasks = vec![];
         let mutex = Arc::new(Mutex::new(()));
@@ -141,8 +131,8 @@ impl ResyClient {
 
         for slot in slots {
             // Only spawn tasks if the slot has a valid 'config_id'
-            let cloned_config_id = slot["token"].to_string().clone();
-            let time_slot = slot["start"].to_string().clone();
+            let cloned_config_id = slot.token.clone();
+            let time_slot = slot.start.clone();
             let self_clone: Arc<ResyClient> = Arc::clone(&self);
             let lock = mutex.clone();
             let booking_successful_clone = Arc::clone(&booking_successful);
@@ -158,10 +148,9 @@ impl ResyClient {
     }
 
     async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> bool {
-        let cleaned_config_id = remove_quotes(config_id);
-        println!("Running snipe task {} at {}", cleaned_config_id, time_slot);
+        println!("Running snipe task {} at {}", config_id, time_slot);
 
-        let book_token = match self.api_gateway.get_reservation_details(0, &cleaned_config_id, self.config.party_size, &self.config.date).await {
+        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {
                 println!("{:?}", json);
                 if json.get("book_token").is_some() {
@@ -182,19 +171,32 @@ impl ResyClient {
         {
             let _guard = book_mutex.lock().await;
 
-            let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
-                Ok(json) => {
-                    println!("{:?}", json);
-                    match json.get("resy_token") {
-                        Some(token) => {
-                            token.to_string();
-                            println!("acquired");
-                        },
-                        None => return false,
-                    }
-                }
-                Err(e) => return false
-            };
+            if booking_successful.load(Ordering::SeqCst) {
+                println!("Already got a booking!");
+                return false; // Recheck the flag after acquiring the lock to avoid race condition
+            }
+
+            let mut rng = rand::thread_rng(); // Get a random number generator
+            let num = rng.gen_range(0..=1);
+
+            if num != 0 {
+                println!("locked a reservation");
+                booking_successful.store(true, Ordering::SeqCst);
+            }
+
+            // let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+            //     Ok(json) => {
+            //         println!("{:?}", json);
+            //         match json.get("resy_token") {
+            //             Some(token) => {
+            //                 token.to_string();
+            //                 println!("acquired");
+            //             },
+            //             None => return false,
+            //         }
+            //     }
+            //     Err(e) => return false
+            // };
         }
 
         return true
@@ -244,9 +246,9 @@ impl ResyClient {
         }
     }
 
-    async fn find_reservation_slots(&self) -> ResyResult<Vec<Value>> {
+    async fn _find_reservation_slots(&self) -> ResyResult<Vec<ResySlot>> {
         match self.api_gateway.find_reservation(self.config.venue_id.as_str(), self.config.date.as_str(), self.config.party_size, self.config.target_time.as_deref()).await {
-            Ok(json) => format_slots(json),
+            Ok(json) => Ok(format_slots(json)),
             Err(e) => {
                 Err(ResyClientError::ApiError(format!("Error fetching venue: {:?}", e)))
             }
@@ -254,6 +256,7 @@ impl ResyClient {
     }
 }
 
+// UTILS
 
 fn extract_venue_slug(url: &str) -> ResyResult<String> {
     if let Some(start) = url.find("venues/") {
@@ -264,67 +267,52 @@ fn extract_venue_slug(url: &str) -> ResyResult<String> {
     Err(ResyClientError::InvalidInput("invalid resy url".to_string()))
 }
 
-fn format_slots(json: Value) -> ResyResult<Vec<Value>> {
-    if let Some(slot_info) = json["results"]["venues"][0]["slots"].as_array() {
-        let mut summarized = Vec::new();
-        for slot in slot_info {
-            if let (
-                Some(config),
-                Some(date),
-                Some(size),
-                Some(quantity)
-            ) = (
-                slot["config"].as_object(),
-                slot["date"].as_object(),
-                slot["size"].as_object(),
-                slot["quantity"].as_u64()
-            ) {
-                if let (
-                    Some(id),
-                    Some(token),
-                    Some(slot_type),
-                    Some(start),
-                    Some(end),
-                    Some(min_size),
-                    Some(max_size)
-                ) = (
-                    config.get("id"),
-                    config.get("token"),
-                    config.get("type"),
-                    date.get("start"), // format: "2024-05-28 13:00:00"
-                    date.get("end"),
-                    size.get("min"),
-                    size.get("max")
-                ) {
-                    summarized.push(json!({
-                        "id": id,
-                        "token": token,
-                        "type": slot_type,
-                        "start": start,
-                        "end": end,
-                        "min_size": min_size,
-                        "max_size": max_size,
-                        "quantity": quantity,
-                    }));
-                }
-            }
-        }
-        Ok(summarized)
+#[derive(Deserialize, Debug)]
+pub(crate) struct ResySlot {
+    pub(crate) id: String,
+    pub(crate) token: String,
+    pub(crate) slot_type: String,
+    pub(crate) start: String,
+    pub(crate) end: String,
+    pub(crate) min_size: u64,
+    pub(crate) max_size: u64,
+    pub(crate) quantity: u64,
+}
+
+fn format_slots(json: Value) -> Vec<ResySlot> {
+    if let Some(slots) = json["results"]["venues"][0]["slots"].as_array() {
+        let summarized: Vec<ResySlot> = slots.iter().filter_map(|slot| {
+
+            let config = slot["config"].as_object()?;
+            let date = slot["date"].as_object()?;
+            let size = slot["size"].as_object()?;
+
+            Some(ResySlot {
+                id: config.get("id")?.as_number()?.to_string(),
+                token: config.get("token")?.as_str()?.to_string(),
+                slot_type: config.get("type")?.as_str()?.to_string(),
+                start: date.get("start")?.as_str()?.to_string(),
+                end: date.get("end")?.as_str()?.to_string(),
+                min_size: size.get("min")?.as_u64()?,
+                max_size: size.get("max")?.as_u64()?,
+                quantity: slot.get("quantity")?.as_u64()?,
+            })
+        }).collect();
+
+        summarized
     } else {
-        Ok(Vec::new())
+        Vec::new()
     }
 }
 
-fn sort_slots_by_closest_time(slots: Vec<Value>, target_time: &str) -> Vec<Value> {
+fn sort_slots_by_closest_time(slots: Vec<ResySlot>, target_time: &str) -> Vec<ResySlot> {
     let target_time = match NaiveTime::parse_from_str(target_time, "%H%M") {
         Ok(time) => time,
         Err(_) => return Vec::new(), // Return an empty vector if there's a parsing error
     };
-    // Sort the slots by the closest time to target_time
-    let mut slots_with_time: Vec<_> = slots.into_iter().filter_map(|slot| {
-        slot["start"].as_str()
-            .and_then(|start| NaiveTime::parse_from_str(&start[11..16], "%H:%M").ok())
-            .map(|time| (slot, time))
+
+    let mut slots_with_time: Vec<(ResySlot, NaiveTime)> = slots.into_iter().filter_map(|slot| {
+        NaiveTime::parse_from_str(&slot.start[11..16], "%H:%M").ok().map(|time| (slot, time))
     }).collect();
 
     slots_with_time.sort_by_key(|(_, time)| {
@@ -333,12 +321,8 @@ fn sort_slots_by_closest_time(slots: Vec<Value>, target_time: &str) -> Vec<Value
         } else {
             target_time.signed_duration_since(*time)
         };
-        duration.num_minutes().abs()
+        duration.num_minutes().abs() as u64 // Abs to avoid panic on negative durations
     });
 
     slots_with_time.into_iter().map(|(slot, _)| slot).collect()
-}
-
-fn remove_quotes(original: String) -> String {
-    original.trim_matches('"').to_string()
 }
