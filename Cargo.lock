@@ -714,6 +714,7 @@ dependencies = [
  "clap",
  "dirs",
  "futures",
+ "log",
  "prettytable-rs",
  "regex",
  "reqwest",

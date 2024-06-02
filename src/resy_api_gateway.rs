@@ -1,10 +1,9 @@
 use std::error::Error;
 use reqwest::{Client, Response};
-use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
 use serde_json::{json, Value};
 
 const RESY_API_BASE_URL: &str = "https://api.resy.com";
-
 
 /// Error type for Resy API specific errors.
 #[derive(Debug)]
@@ -71,8 +70,17 @@ impl ResyAPIGateway {
     /// Sets up the necessary auth headers for making requests to the Resy API.
     fn setup_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
+
+        // ??
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json, text/plain, */*"));
+        headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9"));
+
+        // auth
         headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key)).unwrap());
         headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token).unwrap());
+        headers.insert("x-resy-universal-auth", HeaderValue::from_str(&self.auth_token).unwrap());
+
         headers
     }
 

@@ -136,21 +136,19 @@ impl ResyClient {
         };
 
         let mut tasks = vec![];
-        let has_booked = Arc::new(AtomicBool::new(false));
-        let book_mutex = Arc::new(Mutex::new(()));
+        let mutex = Arc::new(Mutex::new(()));
+        let booking_successful = Arc::new(AtomicBool::new(false));
 
         for slot in slots {
             // Only spawn tasks if the slot has a valid 'config_id'
-            let cloned_config_id = slot["id"].to_string().clone();
-            let start = slot["start"].to_string().clone();
+            let cloned_config_id = slot["token"].to_string().clone();
+            let time_slot = slot["start"].to_string().clone();
             let self_clone: Arc<ResyClient> = Arc::clone(&self);
-
-            // locking
-            let book_mutex_clone = Arc::clone(&book_mutex);
-            let has_booked_clone = Arc::clone(&has_booked);
+            let lock = mutex.clone();
+            let booking_successful_clone = Arc::clone(&booking_successful);
 
             tasks.push(tokio::spawn(async move {
-                self_clone._snipe_task(cloned_config_id, book_mutex_clone, has_booked_clone).await
+                self_clone._snipe_task(cloned_config_id, time_slot, lock, booking_successful_clone).await
             }));
         }
 
@@ -159,11 +157,12 @@ impl ResyClient {
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _snipe_task(&self, config_id: String, book_mutex: Arc<Mutex<()>>, has_booked: Arc<AtomicBool>) -> bool {
-        println!("Running snipe task {}", config_id);
+    async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> bool {
+        println!("Running snipe task {} at {}", config_id, time_slot);
 
-        let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
+        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {
+                println!("{:?}", json);
                 if json.get("book_token").is_some() {
                     match json["book_token"]["value"].as_str() {
                         Some(token) => token.to_string(),
@@ -173,28 +172,30 @@ impl ResyClient {
                     return false // didn't get it in time!
                 }
             }
-            Err(e) => return false
-        };
-
-        let _lock = book_mutex.lock().await;
-        if has_booked.load(Ordering::SeqCst) {
-            return false;
-        }
-
-        let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
-            Ok(json) => {
-                println!("{:?}", json);
-                match json.get("resy_token") {
-                    Some(token) => {
-                        token.to_string();
-                        println!("acquired");
-                        has_booked.store(true, Ordering::SeqCst);
-                    },
-                    None => return false,
-                }
+            Err(e) => {
+                println!("{:?}", e);
+                return false
             }
-            Err(e) => return false
         };
+
+        // locked block, one task at a time
+        {
+            let _guard = book_mutex.lock().await;
+
+            let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+                Ok(json) => {
+                    println!("{:?}", json);
+                    match json.get("resy_token") {
+                        Some(token) => {
+                            token.to_string();
+                            println!("acquired");
+                        },
+                        None => return false,
+                    }
+                }
+                Err(e) => return false
+            };
+        }
 
         return true
     }
@@ -297,7 +298,7 @@ fn format_slots(json: Value) -> ResyResult<Vec<Value>> {
                 ) {
                     summarized.push(json!({
                         "id": id,
-                        "token": token,
+                        "token": remove_quotes(token.to_string()),
                         "type": slot_type,
                         "start": start,
                         "end": end,
@@ -335,4 +336,9 @@ fn sort_slots_by_closest_time(slots: Vec<Value>, target_time: &str) -> Vec<Value
         duration.num_minutes().abs()
     });
 
-    slots_with_time.into_iter().map(|(slot, _)| slot).collect()}
+    slots_with_time.into_iter().map(|(slot, _)| slot).collect()
+}
+
+fn remove_quotes(original: String) -> String {
+    original.trim_matches('"').to_string()
+}
