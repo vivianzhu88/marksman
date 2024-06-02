@@ -158,9 +158,10 @@ impl ResyClient {
     }
 
     async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> bool {
-        println!("Running snipe task {} at {}", config_id, time_slot);
+        let cleaned_config_id = remove_quotes(config_id);
+        println!("Running snipe task {} at {}", cleaned_config_id, time_slot);
 
-        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
+        let book_token = match self.api_gateway.get_reservation_details(0, &cleaned_config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {
                 println!("{:?}", json);
                 if json.get("book_token").is_some() {
@@ -173,7 +174,6 @@ impl ResyClient {
                 }
             }
             Err(e) => {
-                println!("{:?}", e);
                 return false
             }
         };
@@ -298,7 +298,7 @@ fn format_slots(json: Value) -> ResyResult<Vec<Value>> {
                 ) {
                     summarized.push(json!({
                         "id": id,
-                        "token": remove_quotes(token.to_string()),
+                        "token": token,
                         "type": slot_type,
                         "start": start,
                         "end": end,
