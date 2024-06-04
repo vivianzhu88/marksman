@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use futures::future::join_all;
 use chrono::{NaiveDate, NaiveTime};
+use log::{debug, error, info};
 use serde_json::{Value};
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -147,59 +148,72 @@ impl ResyClient {
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> bool {
-        println!("Running snipe task {} at {}", config_id, time_slot);
+    async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> Option<String> {
+        info!("Running snipe @ {} (token: {})", time_slot, config_id);
 
-        let book_token = match self.api_gateway.get_reservation_details(0, &config_id, self.config.party_size, &self.config.date).await {
+        let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
             Ok(json) => {
-                println!("{:?}", json);
+                debug!("Reservation details response {:#?}", json);
+
                 if json.get("book_token").is_some() {
                     match json["book_token"]["value"].as_str() {
                         Some(token) => token.to_string(),
-                        None => return false,
+                        None => return None,
                     }
                 } else {
-                    return false // didn't get it in time!
+                    return None // didn't get it in time!
                 }
             }
             Err(e) => {
-                return false
+                error!("Error getting book token {:?}", e);
+                return None
             }
         };
+
+        info!("Book token acquired @ {} (token: {})", time_slot, book_token);
 
         // locked block, one task at a time
         {
             let _guard = book_mutex.lock().await;
 
             if booking_successful.load(Ordering::SeqCst) {
-                println!("Already got a booking!");
-                return false; // Recheck the flag after acquiring the lock to avoid race condition
+                info!("Already got a booking!");
+                return None; // Recheck the flag after acquiring the lock to avoid race condition
             }
 
-            let mut rng = rand::thread_rng(); // Get a random number generator
-            let num = rng.gen_range(0..=1);
+            // let mut rng = rand::thread_rng(); // Get a random number generator
+            // let num = rng.gen_range(0..=1);
+            //
+            // if num != 0 {
+            //     println!("locked a reservation");
+            //     booking_successful.store(true, Ordering::SeqCst);
+            //     return true
+            // }
+            // println!("failed a reservation");
 
-            if num != 0 {
-                println!("locked a reservation");
-                booking_successful.store(true, Ordering::SeqCst);
-            }
+            let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+                Ok(json) => {
+                    debug!("Booking reservation response {:#?}", json);
 
-            // let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
-            //     Ok(json) => {
-            //         println!("{:?}", json);
-            //         match json.get("resy_token") {
-            //             Some(token) => {
-            //                 token.to_string();
-            //                 println!("acquired");
-            //             },
-            //             None => return false,
-            //         }
-            //     }
-            //     Err(e) => return false
-            // };
+                    match json.get("resy_token") {
+                        Some(token) => {
+                            booking_successful.store(true, Ordering::SeqCst);
+                            info!("acquired {} (token: {})", time_slot, token);
+                            Some(token.to_string())
+                        },
+                        None => None,
+                    }
+                }
+                Err(e) => {
+                    error!("Error booking reservation {:?}", e);
+                    None
+                }
+            };
+
+            info!("token... @ {:?}", resy_token);
         }
 
-        return true
+        None
     }
 
     pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
@@ -209,7 +223,6 @@ impl ResyClient {
                     .as_array()
                     .ok_or_else(|| ResyClientError::NotFound("No payment method found in resy account".to_string()))?;
 
-                println!("{:?}", payment_methods);
                 let payment_id = payment_methods.get(0)
                     .ok_or_else(|| ResyClientError::NotFound("Payment method list is empty".to_string()))?
                     .get("id")

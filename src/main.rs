@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 use resy_client::ResyClient;
 use std::sync::Arc;
+use env_logger::{Env};
 
 mod resy_client;
 mod config;
@@ -14,6 +15,11 @@ mod view_utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+
+    // setup logging
+    let env = Env::default().default_filter_or("trace");
+    env_logger::init_from_env(env);
+
     let config_path = config::get_config_path().context("Failed to get config path")?;
     let marks_config = config::read_config(&config_path)
         .expect("Failed to load configuration");
