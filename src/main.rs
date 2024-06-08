@@ -17,7 +17,7 @@ mod view_utils;
 async fn main() -> Result<()> {
 
     // setup logging
-    let env = Env::default().default_filter_or("debug");
+    let env = Env::default().default_filter_or("info");
     env_logger::init_from_env(env);
 
     let config_path = config::get_config_path().context("Failed to get config path")?;
@@ -78,6 +78,7 @@ async fn main() -> Result<()> {
                 .arg(
                     Arg::new("reset-time")
                         .help("Reset target time for Resy booking (None)")
+                        .short('r')
                         .long("reset-time")
                         .action(ArgAction::SetTrue),
                 ),
@@ -100,6 +101,10 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("snipe")
                 .about("configure sniper for the reservation")
+        )
+        .subcommand(
+            Command::new("setup")
+                .about("configure setup wizard")
         );
 
     // parse cli
@@ -113,6 +118,9 @@ async fn main() -> Result<()> {
             } else {
                 println!("Hello, world!");
             }
+        }
+        Some(("setup", _)) => {
+
         }
         Some(("venue", sub_matches)) => {
             let url = sub_matches.get_one("url").map(String::as_str);
@@ -166,9 +174,9 @@ async fn main() -> Result<()> {
         }
         Some(("snipe", _)) => {
 
-            // let temp_resy_client = Arc::new(resy_client);
             match resy_client.run_sniper().await {
-                _ => println!("done")
+                Ok(tok) => println!("Successful booking! (token: {:#?})", tok),
+                Err(e) => println!("Snipe failed")
             }
 
             return Ok(())

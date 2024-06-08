@@ -132,14 +132,14 @@ impl ResyClient {
 
         for slot in slots {
             match self._sniper_task(&slot.token, &slot.start).await {
-                Ok(token) => {
-                    break
+                Ok(tok) => {
+                    return Ok(tok)
                 }
                 Err(e) => {}
             }
         }
 
-        Ok("Placeholder for compilation".to_string())
+        Err(ResyClientError::BookingError("Booking failure: all slots failed".to_string()))
     }
 
     async fn _sniper_task(&self, config_id: &str, time_slot: &str) -> ResyResult<String> {
