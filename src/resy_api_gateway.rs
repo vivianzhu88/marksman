@@ -156,10 +156,45 @@ impl ResyAPIGateway {
         Self::process_response(res).await
     }
 
+    fn setup_book_headers(&self) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+
+        // Content Type
+        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/x-www-form-urlencoded"));
+
+        // Accept
+        headers.insert(ACCEPT, HeaderValue::from_static("application/json, text/plain, */*"));
+
+        // Accept Language
+        headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9"));
+
+        // Authorization and Token
+        headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("ResyAPI api_key=\"{}\"", self.api_key)).unwrap());
+        headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token).unwrap());
+        headers.insert("x-resy-universal-auth", HeaderValue::from_str(&self.auth_token).unwrap());
+
+        // Additional headers from curl
+        headers.insert("cache-control", HeaderValue::from_static("no-cache"));
+        headers.insert("dnt", HeaderValue::from_static("1"));
+        headers.insert("origin", HeaderValue::from_static("https://widgets.resy.com"));
+        headers.insert("priority", HeaderValue::from_static("u=1, i"));
+        headers.insert("referer", HeaderValue::from_static("https://widgets.resy.com/"));
+        headers.insert("sec-ch-ua", HeaderValue::from_static("\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\""));
+        headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
+        headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"macOS\""));
+        headers.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+        headers.insert("sec-fetch-mode", HeaderValue::from_static("cors"));
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-site"));
+        headers.insert("user-agent", HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"));
+        headers.insert("x-origin", HeaderValue::from_static("https://widgets.resy.com"));
+
+        headers
+    }
+
     /// Books reservation via the Resy API (dry run possible)
     pub async fn book_reservation(&self, book_token: &str, payment_id: &str) -> Result<Value, Box<dyn Error>> {
         let url = format!("{}/3/book", RESY_API_BASE_URL);
-        let headers = self.setup_headers();
+        let headers = self.setup_book_headers();
 
         let body = format!(
             "book_token={}&struct_payment_method={{\"id\":{}}}",

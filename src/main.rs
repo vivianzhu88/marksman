@@ -166,8 +166,8 @@ async fn main() -> Result<()> {
         }
         Some(("snipe", _)) => {
 
-            let temp_resy_client = Arc::new(resy_client);
-            match temp_resy_client.run_snipe().await {
+            // let temp_resy_client = Arc::new(resy_client);
+            match resy_client.run_sniper().await {
                 _ => println!("done")
             }
 

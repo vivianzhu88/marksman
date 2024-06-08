@@ -115,40 +115,33 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    pub(crate) async fn run_snipe(self: Arc<ResyClient>) -> ResyResult<String> {
+    pub(crate) async fn run_sniper(&self) -> ResyResult<String> {
         if !self.config.validate() {
             return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
         }
 
         let mut slots = self._find_reservation_slots().await?;
+        if let Some(target_time) = &self.config.target_time {
+            slots = sort_slots_by_closest_time(slots, target_time);
+        }
 
         if slots.is_empty() {
             return Err(ResyClientError::NotFound("no reservation slots available".to_string()));
         }
 
-        let mut tasks = vec![];
-        let mutex = Arc::new(Mutex::new(()));
-        let booking_successful = Arc::new(AtomicBool::new(false));
-
         for slot in slots {
             // Only spawn tasks if the slot has a valid 'config_id'
             let cloned_config_id = slot.token.clone();
             let time_slot = slot.start.clone();
-            let self_clone: Arc<ResyClient> = Arc::clone(&self);
-            let lock = mutex.clone();
-            let booking_successful_clone = Arc::clone(&booking_successful);
 
-            tasks.push(tokio::spawn(async move {
-                self_clone._snipe_task(cloned_config_id, time_slot, lock, booking_successful_clone).await
-            }));
+            self._sniper_task(cloned_config_id, time_slot).await;
+            break
         }
-
-        let results = join_all(tasks).await;
 
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> Option<String> {
+    async fn _sniper_task(&self, config_id: String, time_slot: String) -> Option<String> {
         info!("Running snipe @ {} (token: {})", time_slot, config_id);
 
         let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
@@ -172,49 +165,127 @@ impl ResyClient {
 
         info!("Book token acquired @ {} (token: {})", time_slot, book_token);
 
-        // locked block, one task at a time
-        {
-            let _guard = book_mutex.lock().await;
+        let resy_token: Option<String> = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+            Ok(json) => {
+                debug!("Booking reservation response {:#?}", json);
 
-            if booking_successful.load(Ordering::SeqCst) {
-                info!("Already got a booking!");
-                return None; // Recheck the flag after acquiring the lock to avoid race condition
+                match json.get("resy_token") {
+                    Some(token) => {
+                        info!("acquired {} (token: {})", time_slot, token);
+                        return Some(token.to_string())
+                    },
+                    None => None,
+                }
             }
-
-            // let mut rng = rand::thread_rng(); // Get a random number generator
-            // let num = rng.gen_range(0..=1);
-            //
-            // if num != 0 {
-            //     println!("locked a reservation");
-            //     booking_successful.store(true, Ordering::SeqCst);
-            //     return true
-            // }
-            // println!("failed a reservation");
-
-            let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
-                Ok(json) => {
-                    debug!("Booking reservation response {:#?}", json);
-
-                    match json.get("resy_token") {
-                        Some(token) => {
-                            booking_successful.store(true, Ordering::SeqCst);
-                            info!("acquired {} (token: {})", time_slot, token);
-                            Some(token.to_string())
-                        },
-                        None => None,
-                    }
-                }
-                Err(e) => {
-                    error!("Error booking reservation {:?}", e);
-                    None
-                }
-            };
-
-            info!("token... @ {:?}", resy_token);
-        }
+            Err(e) => {
+                error!("Error booking reservation {:?}", e);
+                None
+            }
+        };
 
         None
     }
+
+    // pub(crate) async fn run_snipe(self: Arc<ResyClient>) -> ResyResult<String> {
+    //     if !self.config.validate() {
+    //         return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
+    //     }
+    //
+    //     let mut slots = self._find_reservation_slots().await?;
+    //
+    //     if slots.is_empty() {
+    //         return Err(ResyClientError::NotFound("no reservation slots available".to_string()));
+    //     }
+    //
+    //     let mut tasks = vec![];
+    //     let mutex = Arc::new(Mutex::new(()));
+    //     let booking_successful = Arc::new(AtomicBool::new(false));
+    //
+    //     for slot in slots {
+    //         // Only spawn tasks if the slot has a valid 'config_id'
+    //         let cloned_config_id = slot.token.clone();
+    //         let time_slot = slot.start.clone();
+    //         let self_clone: Arc<ResyClient> = Arc::clone(&self);
+    //         let lock = mutex.clone();
+    //         let booking_successful_clone = Arc::clone(&booking_successful);
+    //
+    //         tasks.push(tokio::spawn(async move {
+    //             self_clone._snipe_task(cloned_config_id, time_slot, lock, booking_successful_clone).await
+    //         }));
+    //     }
+    //
+    //     let results = join_all(tasks).await;
+    //
+    //     Ok("Placeholder for compilation".to_string())
+    // }
+    //
+    // async fn _snipe_task(&self, config_id: String, time_slot: String, book_mutex: Arc<Mutex<()>>, booking_successful: Arc<AtomicBool>) -> Option<String> {
+    //     info!("Running snipe @ {} (token: {})", time_slot, config_id);
+    //
+    //     let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
+    //         Ok(json) => {
+    //             debug!("Reservation details response {:#?}", json);
+    //
+    //             if json.get("book_token").is_some() {
+    //                 match json["book_token"]["value"].as_str() {
+    //                     Some(token) => token.to_string(),
+    //                     None => return None,
+    //                 }
+    //             } else {
+    //                 return None // didn't get it in time!
+    //             }
+    //         }
+    //         Err(e) => {
+    //             error!("Error getting book token {:?}", e);
+    //             return None
+    //         }
+    //     };
+    //
+    //     info!("Book token acquired @ {} (token: {})", time_slot, book_token);
+    //
+    //     // locked block, one task at a time
+    //     {
+    //         let _guard = book_mutex.lock().await;
+    //
+    //         if booking_successful.load(Ordering::SeqCst) {
+    //             info!("Already got a booking!");
+    //             return None; // Recheck the flag after acquiring the lock to avoid race condition
+    //         }
+    //
+    //         // let mut rng = rand::thread_rng(); // Get a random number generator
+    //         // let num = rng.gen_range(0..=1);
+    //         //
+    //         // if num != 0 {
+    //         //     println!("locked a reservation");
+    //         //     booking_successful.store(true, Ordering::SeqCst);
+    //         //     return true
+    //         // }
+    //         // println!("failed a reservation");
+    //
+    //         let resy_token = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+    //             Ok(json) => {
+    //                 debug!("Booking reservation response {:#?}", json);
+    //
+    //                 match json.get("resy_token") {
+    //                     Some(token) => {
+    //                         booking_successful.store(true, Ordering::SeqCst);
+    //                         info!("acquired {} (token: {})", time_slot, token);
+    //                         Some(token.to_string())
+    //                     },
+    //                     None => None,
+    //                 }
+    //             }
+    //             Err(e) => {
+    //                 error!("Error booking reservation {:?}", e);
+    //                 None
+    //             }
+    //         };
+    //
+    //         info!("token... @ {:?}", resy_token);
+    //     }
+    //
+    //     None
+    // }
 
     pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
         match self.api_gateway.get_user().await {
