@@ -21,6 +21,7 @@ pub enum ResyClientError {
     InternalError(String),
     InvalidInput(String),
     ParseError(String),
+    BookingError(String),
 }
 
 impl std::fmt::Display for ResyClientError {
@@ -130,18 +131,18 @@ impl ResyClient {
         }
 
         for slot in slots {
-            // Only spawn tasks if the slot has a valid 'config_id'
-            let cloned_config_id = slot.token.clone();
-            let time_slot = slot.start.clone();
-
-            self._sniper_task(cloned_config_id, time_slot).await;
-            break
+            match self._sniper_task(&slot.token, &slot.start).await {
+                Ok(token) => {
+                    break
+                }
+                Err(e) => {}
+            }
         }
 
         Ok("Placeholder for compilation".to_string())
     }
 
-    async fn _sniper_task(&self, config_id: String, time_slot: String) -> Option<String> {
+    async fn _sniper_task(&self, config_id: &str, time_slot: &str) -> ResyResult<String> {
         info!("Running snipe @ {} (token: {})", time_slot, config_id);
 
         let book_token = match self.api_gateway.get_reservation_details(1, &config_id, self.config.party_size, &self.config.date).await {
@@ -151,39 +152,37 @@ impl ResyClient {
                 if json.get("book_token").is_some() {
                     match json["book_token"]["value"].as_str() {
                         Some(token) => token.to_string(),
-                        None => return None,
+                        None => return Err(ResyClientError::BookingError("Book token not found".to_string()))
                     }
                 } else {
-                    return None // didn't get it in time!
+                    return Err(ResyClientError::BookingError("Error fetching book token".to_string())) // didn't get it in time!
                 }
             }
             Err(e) => {
                 error!("Error getting book token {:?}", e);
-                return None
+                return Err(ResyClientError::BookingError("Error fetching book token".to_string()))
             }
         };
 
         info!("Book token acquired @ {} (token: {})", time_slot, book_token);
 
-        let resy_token: Option<String> = match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
+        return match self.api_gateway.book_reservation(&book_token, &self.config.payment_id).await {
             Ok(json) => {
                 debug!("Booking reservation response {:#?}", json);
 
                 match json.get("resy_token") {
                     Some(token) => {
                         info!("acquired {} (token: {})", time_slot, token);
-                        return Some(token.to_string())
+                        Ok(token.to_string())
                     },
-                    None => None,
+                    None => Err(ResyClientError::BookingError("Error booking reservation".to_string())),
                 }
             }
             Err(e) => {
                 error!("Error booking reservation {:?}", e);
-                None
+                Err(ResyClientError::BookingError("Error booking reservation".to_string()))
             }
         };
-
-        None
     }
 
     // pub(crate) async fn run_snipe(self: Arc<ResyClient>) -> ResyResult<String> {

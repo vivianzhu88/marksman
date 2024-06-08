@@ -17,7 +17,7 @@ mod view_utils;
 async fn main() -> Result<()> {
 
     // setup logging
-    let env = Env::default().default_filter_or("trace");
+    let env = Env::default().default_filter_or("debug");
     env_logger::init_from_env(env);
 
     let config_path = config::get_config_path().context("Failed to get config path")?;
