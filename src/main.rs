@@ -7,6 +7,7 @@ use regex::Regex;
 use resy_client::ResyClient;
 use std::sync::Arc;
 use env_logger::{Env};
+use chrono::{Local, Duration};
 
 mod resy_client;
 mod config;
@@ -101,6 +102,22 @@ async fn main() -> Result<()> {
         .subcommand(
             Command::new("snipe")
                 .about("configure sniper for the reservation")
+                .arg(
+                    Arg::new("snipe-time")
+                        .help("Snipe time for Resy booking (HHMM)")
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                        .short('t')
+                        .long("snipe-time")
+                        .required(false),
+                )
+                .arg(
+                    Arg::new("snipe-date")
+                        .help("Snipe date for Resy booking (YYYY-MM-DD). shortcut dates with 'today' or 'tmrw'")
+                        .value_parser(clap::builder::NonEmptyStringValueParser::new())
+                        .short('d')
+                        .long("snipe-date")
+                        .required(false),
+                )
         )
         .subcommand(
             Command::new("setup")
@@ -172,7 +189,16 @@ async fn main() -> Result<()> {
                 Err(e) => println!("Failed to serialize config: {}", e),
             }
         }
-        Some(("snipe", _)) => {
+        Some(("snipe", sub_matches)) => {
+            let snipe_time = sub_matches.get_one("snipe-time").map(String::as_str);
+            let snipe_date = sub_matches.get_one("snipe-date").map(String::as_str);
+
+            // Determine the date based on input
+            let formatted_date = match snipe_date {
+                Some("today") => Local::now().format("%Y-%m-%d").to_string(),
+                Some("tmrw") => (Local::now() + Duration::days(1)).format("%Y-%m-%d").to_string(),
+                _ => snipe_date.unwrap_or_default().to_string(),
+            };
 
             match resy_client.run_sniper().await {
                 Ok(tok) => println!("Successful booking! (token: {:#?})", tok),

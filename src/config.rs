@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Serialize, Deserialize};
 use toml;
-use chrono::{Utc, Duration};
+use chrono::{Utc, Duration, Local};
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -29,6 +29,12 @@ pub struct Config {
 
     pub target_time: Option<String>,
 
+    #[serde(default = "_default_snipe_time")]
+    pub snipe_time: String,
+
+    #[serde(default = "_default_snipe_date")]
+    pub snipe_date: String,
+
     #[serde(default)]
     pub payment_id: String
 }
@@ -38,11 +44,19 @@ fn _default_date() -> String {
     one_week_later.format("%Y-%m-%d").to_string()
 }
 
+fn _default_snipe_date() -> String {
+    (Local::now() + Duration::days(1)).format("%Y-%m-%d").to_string()
+}
+
 const fn _default_party_size() -> u8 { 2 }
+
+fn _default_snipe_time() -> String { String::from("0000") }
 
 impl Default for Config {
     fn default() -> Self {
         let one_week_later = Utc::now().date_naive() + Duration::days(7);
+        let tmrw = (Local::now() + Duration::days(1)).format("%Y-%m-%d").to_string();
+
         Config {
             api_key: String::new(),
             auth_token: String::new(),
@@ -52,6 +66,8 @@ impl Default for Config {
             party_size: 2,
             target_time: None,
             payment_id: String::new(),
+            snipe_time: String::from("0000"),
+            snipe_date: tmrw
         }
     }
 }
@@ -67,6 +83,8 @@ impl Clone for Config {
             party_size: self.party_size,
             target_time: self.target_time.clone(),
             payment_id: self.payment_id.clone(),
+            snipe_time: self.snipe_time.clone(),
+            snipe_date: self.snipe_date.clone(),
         }
     }
 }

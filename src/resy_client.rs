@@ -2,7 +2,7 @@ use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use futures::future::join_all;
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
 use log::{debug, error, info};
 use serde_json::{Value};
 use serde::Deserialize;
@@ -116,7 +116,18 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    pub(crate) async fn run_sniper(&self) -> ResyResult<String> {
+    pub(crate) async fn run_sniper(&self, snipe_time: &str, snipe_date: &str) -> ResyResult<String> {
+        let date = NaiveDate::parse_from_str(snipe_date, "%Y-%m-%d")
+            .map_err(|e| format!("Invalid date format: {}", e))?;
+        let time = NaiveTime::parse_from_str(snipe_time, "%H%M")
+            .map_err(|e| format!("Invalid time format: {}", e))?;
+        let naive_datetime = date.and_time(time);
+        let datetime = Utc.from_utc_datetime(&naive_datetime);
+
+        if datetime < Utc::now() {
+            return Err(ResyClientError::InvalidInput("Snipe date/time is in the past".to_string()));
+        }
+
         if !self.config.validate() {
             return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
         }
