@@ -1,17 +1,19 @@
 use std::error::Error;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
+use std::time::{Duration as StdDuration, Instant};
 use futures::future::join_all;
-use chrono::{DateTime, NaiveDate, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, Local, NaiveDate, NaiveTime, TimeZone, Utc};
 use log::{debug, error, info};
 use serde_json::{Value};
 use serde::Deserialize;
 use tokio::sync::Mutex;
 use rand;
 use rand::Rng;
+use tokio::time::{sleep, Duration as TokioDuration};
 use crate::config::Config;
 use crate::resy_api_gateway::ResyAPIGateway;
-
 
 #[derive(Debug)]
 pub enum ResyClientError {
@@ -116,17 +118,43 @@ impl ResyClient {
         Ok((venue_id, slots))
     }
 
-    pub(crate) async fn run_sniper(&self, snipe_time: &str, snipe_date: &str) -> ResyResult<String> {
+    pub(crate) async fn run_sniper(&mut self, snipe_time: &str, snipe_date: &str) -> ResyResult<String> {
         let date = NaiveDate::parse_from_str(snipe_date, "%Y-%m-%d")
-            .map_err(|e| format!("Invalid date format: {}", e))?;
+            .map_err(|_| ResyClientError::InvalidInput("Invalid date format".to_string()))?;
         let time = NaiveTime::parse_from_str(snipe_time, "%H%M")
-            .map_err(|e| format!("Invalid time format: {}", e))?;
+            .map_err(|_| ResyClientError::InvalidInput("Invalid time format".to_string()))?;
         let naive_datetime = date.and_time(time);
-        let datetime = Utc.from_utc_datetime(&naive_datetime);
+        let datetime = Local.from_local_datetime(&naive_datetime).single()
+            .ok_or(ResyClientError::InvalidInput("Could not convert to local datetime".to_string()))?;
 
-        if datetime < Utc::now() {
+        if datetime <= Local::now() + Duration::minutes(1) {
             return Err(ResyClientError::InvalidInput("Snipe date/time is in the past".to_string()));
         }
+
+        self.config.snipe_date = snipe_date.to_string();
+        self.config.snipe_time = snipe_time.to_string();
+
+        let mut remaining = datetime - Local::now();
+
+        let seconds_to_sleep = remaining.num_seconds() % 60;
+        if seconds_to_sleep > 0 {
+            sleep(TokioDuration::from_secs(seconds_to_sleep as u64)).await;
+        }
+
+        remaining = datetime - Local::now();
+        while remaining > Duration::seconds(0) {
+            if remaining <= Duration::minutes(2) {
+                // Log more frequently as the time approaches
+                info!("Time remaining: {} seconds", remaining.num_seconds());
+                sleep(TokioDuration::from_secs(1)).await;
+            } else {
+                // Log periodically
+                info!("Time remaining: {} minutes", remaining.num_minutes());
+                sleep(TokioDuration::from_secs(60)).await;
+            }
+            remaining = datetime - Local::now();
+        }
+
 
         if !self.config.validate() {
             return Err(ResyClientError::InvalidInput("reservation config is not complete".to_string()));
