@@ -29,7 +29,7 @@ async fn main() -> Result<()> {
 
     // define cli commands
     let cli = Command::new("marksman")
-        .version("0.1")
+        .version("0.1.0")
         .author("Anish Agrawal")
         .about("Snipe reservations in NYC")
         .subcommand(
