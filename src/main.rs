@@ -18,7 +18,7 @@ mod view_utils;
 async fn main() -> Result<()> {
 
     // setup logging
-    let env = Env::default().default_filter_or("trace");
+    let env = Env::default().default_filter_or("none");
     env_logger::init_from_env(env);
 
     let config_path = config::get_config_path().context("Failed to get config path")?;
@@ -190,7 +190,7 @@ async fn main() -> Result<()> {
             }
         }
         Some(("snipe", sub_matches)) => {
-            let snipe_time = sub_matches.get_one("snipe-time").map(String::as_str).unwrap_or("0000");
+            let snipe_time = sub_matches.get_one("snipe-time").map(String::as_str).unwrap_or("");
             let snipe_date = sub_matches.get_one("snipe-date").map(String::as_str);
 
             // Determine the date based on input

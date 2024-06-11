@@ -119,10 +119,24 @@ impl ResyClient {
     }
 
     pub(crate) async fn run_sniper(&mut self, snipe_time: &str, snipe_date: &str) -> ResyResult<String> {
-        let date = NaiveDate::parse_from_str(snipe_date, "%Y-%m-%d")
-            .map_err(|_| ResyClientError::InvalidInput("Invalid date format".to_string()))?;
-        let time = NaiveTime::parse_from_str(snipe_time, "%H%M")
-            .map_err(|_| ResyClientError::InvalidInput("Invalid time format".to_string()))?;
+        // Check if snipe_date is provided and valid, else use the stored config value
+        let date = if !snipe_date.is_empty() {
+            NaiveDate::parse_from_str(snipe_date, "%Y-%m-%d")
+                .map_err(|_| ResyClientError::InvalidInput("Invalid date format".to_string()))?
+        } else {
+            NaiveDate::parse_from_str(&self.config.snipe_date, "%Y-%m-%d")
+                .map_err(|_| ResyClientError::InvalidInput("Stored date format is invalid".to_string()))?
+        };
+
+        // Check if snipe_time is provided and valid, else use the stored config value
+        let time = if !snipe_time.is_empty() {
+            NaiveTime::parse_from_str(snipe_time, "%H%M")
+                .map_err(|_| ResyClientError::InvalidInput("Invalid time format".to_string()))?
+        } else {
+            NaiveTime::parse_from_str(&self.config.snipe_time, "%H%M")
+                .map_err(|_| ResyClientError::InvalidInput("Stored time format is invalid".to_string()))?
+        };
+
         let naive_datetime = date.and_time(time);
         let datetime = Local.from_local_datetime(&naive_datetime).single()
             .ok_or(ResyClientError::InvalidInput("Could not convert to local datetime".to_string()))?;
@@ -131,8 +145,8 @@ impl ResyClient {
             return Err(ResyClientError::InvalidInput("Snipe date/time is in the past".to_string()));
         }
 
-        self.config.snipe_date = snipe_date.to_string();
-        self.config.snipe_time = snipe_time.to_string();
+        self.config.snipe_date = if !snipe_date.is_empty() { snipe_date.to_string() } else { self.config.snipe_date.clone() };
+        self.config.snipe_time = if !snipe_time.is_empty() { snipe_time.to_string() } else { self.config.snipe_time.clone() };
 
         let mut remaining = datetime - Local::now();
 
