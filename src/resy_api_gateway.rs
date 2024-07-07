@@ -81,6 +81,21 @@ impl ResyAPIGateway {
         headers.insert("x-resy-auth-token", HeaderValue::from_str(&self.auth_token).unwrap());
         headers.insert("x-resy-universal-auth", HeaderValue::from_str(&self.auth_token).unwrap());
 
+        // Additional headers from curl
+        headers.insert("cache-control", HeaderValue::from_static("no-cache"));
+        headers.insert("dnt", HeaderValue::from_static("1"));
+        headers.insert("origin", HeaderValue::from_static("https://widgets.resy.com"));
+        headers.insert("priority", HeaderValue::from_static("u=1, i"));
+        headers.insert("referer", HeaderValue::from_static("https://widgets.resy.com/"));
+        headers.insert("sec-ch-ua", HeaderValue::from_static("\"Not-A.Brand\";v=\"99\", \"Chromium\";v=\"124\""));
+        headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
+        headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"macOS\""));
+        headers.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+        headers.insert("sec-fetch-mode", HeaderValue::from_static("cors"));
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-site"));
+        headers.insert("user-agent", HeaderValue::from_static("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"));
+        headers.insert("x-origin", HeaderValue::from_static("https://widgets.resy.com"));
+
         headers
     }
 
