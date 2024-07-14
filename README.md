@@ -8,7 +8,6 @@ Snipe reservations in NYC
 Usage: marksman [COMMAND]
 
 Commands:
-  hello  Prints greeting
   venue  Details about venue
   load   Load auth credentials for Resy API
   state  current marksman configuration
