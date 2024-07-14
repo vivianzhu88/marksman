@@ -1,3 +1,26 @@
+# Marskman
+A CLI written in Rust to snipe reservations!
+
+```
+$ marksman --help
+Snipe reservations in NYC
+
+Usage: marksman [COMMAND]
+
+Commands:
+  hello  Prints greeting
+  venue  Details about venue
+  load   Load auth credentials for Resy API
+  state  current marksman configuration
+  snipe  configure sniper for the reservation
+  setup  configure setup wizard
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+```
+
 ### TODO 
 
 - [X] Ingest target restaurant (via URL)
