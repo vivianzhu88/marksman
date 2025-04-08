@@ -342,6 +342,13 @@ impl ResyClient {
     pub(crate) async fn get_payment_id(&mut self) -> ResyResult<String> {
         match self.api_gateway.get_user().await {
             Ok(user_data) => {
+                // First try to get the payment_method_id directly from the root
+                if let Some(payment_id) = user_data["payment_method_id"].as_i64() {
+                    self.config.payment_id = payment_id.to_string();
+                    return Ok(payment_id.to_string());
+                }
+
+                // If not found, try the payment_methods array
                 let payment_methods = user_data["payment_methods"]
                     .as_array()
                     .ok_or_else(|| ResyClientError::NotFound("No payment method found in resy account".to_string()))?;
